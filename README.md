@@ -29,7 +29,6 @@ Pastikan sudah terinstall di komputer kamu:
 
 ```bash
 git clone <URL_REPOSITORY>
-cd internal-management-system/my-app
 ```
 
 ### 2. Install dependencies
