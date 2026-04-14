@@ -1,197 +1,396 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useAuthStore } from '@/stores/authStore'
+import { ref, computed, onMounted, watch } from 'vue'
+import { guestService } from '@/services/guestService'
+import { guestVisitService } from '@/services/guestVisitService'
 import {
-  dummyGuests,
-  dummyGuestVisits,
-  dummyUsers,
-  guestVisitTypes
-} from '@/utils/dummyData'
+  formatDate,
+  toJakartaDatetimeInput,
+  jakartaInputToISO,
+  nowJakartaDatetimeInput
+} from '@/utils/dateFormat'
 
-const authStore = useAuthStore()
+// ============ TOAST ============
+const toast = ref({ show: false, type: 'success', message: '' })
+let toastTimer = null
+function showToast(message, type = 'success') {
+  toast.value = { show: true, type, message }
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value.show = false), 2500)
+}
 
-// ====== STATE ======
+function extractError(err, fallback = 'Terjadi kesalahan') {
+  return err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback
+}
+
+// formatDate, toJakartaDatetimeInput, jakartaInputToISO, nowJakartaDatetimeInput
+// dipinjam dari @/utils/dateFormat supaya semua tampilan waktu terkunci ke WIB
+// (backend mengembalikan waktu dalam timezone "overseas" / UTC).
+
+// ============ TAB ============
 const activeTab = ref('kunjungan') // kunjungan | tamu
 
-// Clone dummy data sebagai state lokal
-const guests = ref(dummyGuests.map((g) => ({ ...g })))
-const visits = ref(dummyGuestVisits.map((v) => ({ ...v })))
-const hostUsers = dummyUsers // untuk pilih host
+// ============ GUEST LIST ============
+const guests = ref([])
+const guestMeta = ref(null)
+const guestPage = ref(1)
+const guestLimit = ref(5)
+const guestSearch = ref('')
+const guestSortBy = ref('createdAt')
+const guestSortOrder = ref('desc')
+const loadingGuests = ref(false)
 
-// ====== HELPERS ======
-function getGuestById(id) {
-  return guests.value.find((g) => g.id === id)
+async function fetchGuests() {
+  loadingGuests.value = true
+  try {
+    const { data, meta } = await guestService.list({
+      page: guestPage.value,
+      limit: guestLimit.value,
+      search: guestSearch.value || undefined,
+      sortBy: guestSortBy.value,
+      sortOrder: guestSortOrder.value
+    })
+    guests.value = Array.isArray(data) ? data : []
+    guestMeta.value = meta
+  } catch (err) {
+    showToast(extractError(err, 'Gagal memuat data tamu'), 'error')
+  } finally {
+    loadingGuests.value = false
+  }
 }
 
-function getHostById(id) {
-  return hostUsers.find((u) => u.id === id)
-}
-
-function getTypeLabel(value) {
-  return guestVisitTypes.find((t) => t.value === value)?.label || value
-}
-
-function formatEventTime(iso) {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-// ====== VISIT FORM ======
-const showVisitModal = ref(false)
-const editingVisit = ref(null)
-const visitForm = ref({
-  guestId: '',
-  hostUserId: '',
-  type: 'KELUARGA',
-  eventTime: '',
-  note: ''
+const guestTotalPages = computed(() => {
+  if (!guestMeta.value) return 1
+  return (
+    guestMeta.value.totalPages ||
+    guestMeta.value.total_pages ||
+    Math.max(1, Math.ceil((guestMeta.value.total || 0) / guestLimit.value))
+  )
 })
-const visitLoading = ref(false)
 
-function openCreateVisit() {
-  editingVisit.value = null
-  visitForm.value = {
-    guestId: guests.value[0]?.id || '',
-    hostUserId: authStore.user?.id || hostUsers[0]?.id || '',
-    type: 'KELUARGA',
-    eventTime: new Date().toISOString().slice(0, 16),
-    note: ''
-  }
-  showVisitModal.value = true
-}
+watch(guestPage, fetchGuests)
+watch([guestSortBy, guestSortOrder], () => {
+  guestPage.value = 1
+  fetchGuests()
+})
 
-function openEditVisit(visit) {
-  editingVisit.value = visit
-  visitForm.value = {
-    guestId: visit.guestId,
-    hostUserId: visit.hostUserId,
-    type: visit.type,
-    eventTime: visit.eventTime.slice(0, 16),
-    note: visit.note || ''
-  }
-  showVisitModal.value = true
-}
+// debounce search
+let guestSearchTimer = null
+watch(guestSearch, () => {
+  if (guestSearchTimer) clearTimeout(guestSearchTimer)
+  guestSearchTimer = setTimeout(() => {
+    guestPage.value = 1
+    fetchGuests()
+  }, 400)
+})
 
-async function saveVisit() {
-  if (!visitForm.value.guestId || !visitForm.value.hostUserId) return
-  visitLoading.value = true
-  await new Promise((r) => setTimeout(r, 300))
-
-  const payload = {
-    guestId: Number(visitForm.value.guestId),
-    hostUserId: Number(visitForm.value.hostUserId),
-    type: visitForm.value.type,
-    eventTime: visitForm.value.eventTime,
-    note: visitForm.value.note
-  }
-
-  if (editingVisit.value) {
-    Object.assign(editingVisit.value, payload)
-  } else {
-    visits.value.unshift({ id: Date.now(), ...payload })
-  }
-
-  visitLoading.value = false
-  showVisitModal.value = false
-}
-
-function deleteVisit(id) {
-  if (!confirm('Hapus kunjungan ini?')) return
-  visits.value = visits.value.filter((v) => v.id !== id)
-}
-
-// Visit list sorted terbaru dulu
-const sortedVisits = computed(() =>
-  [...visits.value].sort((a, b) => new Date(b.eventTime) - new Date(a.eventTime))
-)
-
-// ====== GUEST FORM ======
+// ============ GUEST FORM (MODAL) ============
 const showGuestModal = ref(false)
 const editingGuest = ref(null)
 const guestForm = ref({ name: '', phoneNumber: '', note: '' })
-const guestLoading = ref(false)
+const guestFormError = ref('')
+const savingGuest = ref(false)
 
 function openCreateGuest() {
   editingGuest.value = null
   guestForm.value = { name: '', phoneNumber: '', note: '' }
+  guestFormError.value = ''
   showGuestModal.value = true
 }
 
 function openEditGuest(guest) {
   editingGuest.value = guest
   guestForm.value = {
-    name: guest.name,
-    phoneNumber: guest.phoneNumber,
+    name: guest.name || '',
+    phoneNumber: guest.phoneNumber || '',
     note: guest.note || ''
   }
+  guestFormError.value = ''
   showGuestModal.value = true
 }
 
 async function saveGuest() {
-  if (!guestForm.value.name) return
-  guestLoading.value = true
-  await new Promise((r) => setTimeout(r, 300))
-
-  if (editingGuest.value) {
-    Object.assign(editingGuest.value, guestForm.value)
-  } else {
-    guests.value.push({ id: Date.now(), ...guestForm.value })
-  }
-
-  guestLoading.value = false
-  showGuestModal.value = false
-}
-
-function deleteGuest(id) {
-  const hasVisits = visits.value.some((v) => v.guestId === id)
-  if (hasVisits) {
-    alert('Tamu ini masih memiliki catatan kunjungan. Hapus kunjungannya terlebih dahulu.')
+  guestFormError.value = ''
+  if (!guestForm.value.name?.trim()) {
+    guestFormError.value = 'Nama wajib diisi'
     return
   }
-  if (!confirm('Hapus data tamu ini?')) return
-  guests.value = guests.value.filter((g) => g.id !== id)
+  savingGuest.value = true
+  try {
+    const payload = {
+      name: guestForm.value.name,
+      phoneNumber: guestForm.value.phoneNumber || undefined,
+      note: guestForm.value.note || undefined
+    }
+    if (editingGuest.value) {
+      await guestService.update(editingGuest.value.id, payload)
+      showToast('Data tamu diperbarui')
+    } else {
+      await guestService.create(payload)
+      showToast('Tamu baru ditambahkan')
+    }
+    showGuestModal.value = false
+    await fetchGuests()
+    // refresh dropdown tamu di form kunjungan bila sedang dibuka
+    await fetchAllGuestsForSelect()
+  } catch (err) {
+    guestFormError.value = extractError(err, 'Gagal menyimpan tamu')
+  } finally {
+    savingGuest.value = false
+  }
 }
+
+async function removeGuest(guest) {
+  if (!confirm(`Hapus tamu "${guest.name}"?`)) return
+  try {
+    await guestService.remove(guest.id)
+    showToast('Tamu berhasil dihapus')
+    await fetchGuests()
+  } catch (err) {
+    showToast(extractError(err, 'Gagal menghapus tamu'), 'error')
+  }
+}
+
+// ============ ALL GUESTS (FOR DROPDOWN IN VISIT MODAL) ============
+const allGuests = ref([])
+async function fetchAllGuestsForSelect() {
+  try {
+    // Ambil jumlah besar biar kebanyakan tamu muncul di dropdown.
+    const { data } = await guestService.list({ page: 1, limit: 200 })
+    allGuests.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.warn('Gagal memuat dropdown tamu:', extractError(err))
+  }
+}
+
+function guestNameById(id) {
+  return allGuests.value.find((g) => String(g.id) === String(id))?.name || '-'
+}
+
+// ============ VISIT LIST ============
+const visits = ref([])
+const visitMeta = ref(null)
+const visitPage = ref(1)
+const visitLimit = ref(5)
+const visitFrom = ref('')
+const visitTo = ref('')
+const visitStatus = ref('all') // all | open | closed
+const visitSortBy = ref('createdAt') // in | out | createdAt
+const visitSortOrder = ref('desc')
+const visitGuestId = ref('')
+const loadingVisits = ref(false)
+
+async function fetchVisits() {
+  loadingVisits.value = true
+  try {
+    const { data, meta } = await guestVisitService.list({
+      page: visitPage.value,
+      limit: visitLimit.value,
+      from: visitFrom.value || undefined,
+      to: visitTo.value || undefined,
+      status: visitStatus.value || undefined,
+      sortBy: visitSortBy.value,
+      sortOrder: visitSortOrder.value,
+      guestId: visitGuestId.value || undefined
+    })
+    visits.value = Array.isArray(data) ? data : []
+    visitMeta.value = meta
+  } catch (err) {
+    showToast(extractError(err, 'Gagal memuat kunjungan'), 'error')
+  } finally {
+    loadingVisits.value = false
+  }
+}
+
+const visitTotalPages = computed(() => {
+  if (!visitMeta.value) return 1
+  return (
+    visitMeta.value.totalPages ||
+    visitMeta.value.total_pages ||
+    Math.max(1, Math.ceil((visitMeta.value.total || 0) / visitLimit.value))
+  )
+})
+
+watch(visitPage, fetchVisits)
+watch([visitStatus, visitSortBy, visitSortOrder, visitGuestId], () => {
+  visitPage.value = 1
+  fetchVisits()
+})
+
+function applyVisitDateFilter() {
+  visitPage.value = 1
+  fetchVisits()
+}
+
+// ============ VISIT FORM (MODAL) ============
+const showVisitModal = ref(false)
+const editingVisit = ref(null)
+const visitForm = ref({ guestId: '', inTime: '', outTime: '', note: '' })
+const visitFormError = ref('')
+const savingVisit = ref(false)
+
+function openCreateVisit() {
+  editingVisit.value = null
+  visitForm.value = {
+    guestId: '',
+    inTime: nowJakartaDatetimeInput(),
+    outTime: '',
+    note: ''
+  }
+  visitFormError.value = ''
+  showVisitModal.value = true
+}
+
+function openEditVisit(visit) {
+  editingVisit.value = visit
+  visitForm.value = {
+    guestId: visit.guestId || visit.guest?.id || '',
+    inTime: toJakartaDatetimeInput(visit.inTime),
+    outTime: toJakartaDatetimeInput(visit.outTime),
+    note: visit.note || ''
+  }
+  visitFormError.value = ''
+  showVisitModal.value = true
+}
+
+async function saveVisit() {
+  visitFormError.value = ''
+  if (!visitForm.value.guestId) {
+    visitFormError.value = 'Pilih tamu'
+    return
+  }
+  savingVisit.value = true
+  try {
+    // Input datetime-local di-interpretasikan sebagai WIB, dikonversi ke UTC ISO.
+    const payload = {
+      guestId: visitForm.value.guestId,
+      inTime: jakartaInputToISO(visitForm.value.inTime),
+      outTime: jakartaInputToISO(visitForm.value.outTime),
+      note: visitForm.value.note || undefined
+    }
+    if (editingVisit.value) {
+      await guestVisitService.update(editingVisit.value.id, payload)
+      showToast('Kunjungan diperbarui')
+    } else {
+      await guestVisitService.create(payload)
+      showToast('Kunjungan dicatat')
+    }
+    showVisitModal.value = false
+    await fetchVisits()
+  } catch (err) {
+    visitFormError.value = extractError(err, 'Gagal menyimpan kunjungan')
+  } finally {
+    savingVisit.value = false
+  }
+}
+
+async function removeVisit(visit) {
+  if (!confirm('Hapus data kunjungan ini?')) return
+  try {
+    await guestVisitService.remove(visit.id)
+    showToast('Kunjungan dihapus')
+    await fetchVisits()
+  } catch (err) {
+    showToast(extractError(err, 'Gagal menghapus kunjungan'), 'error')
+  }
+}
+
+// ============ CLOSE VISIT ============
+const showCloseModal = ref(false)
+const closingVisit = ref(null)
+const closeForm = ref({ outTime: '', note: '' })
+const closeError = ref('')
+const savingClose = ref(false)
+
+function openCloseModal(visit) {
+  closingVisit.value = visit
+  closeForm.value = {
+    outTime: nowJakartaDatetimeInput(),
+    note: ''
+  }
+  closeError.value = ''
+  showCloseModal.value = true
+}
+
+async function submitClose() {
+  closeError.value = ''
+  savingClose.value = true
+  try {
+    // Input datetime-local di-interpretasikan sebagai WIB, dikonversi ke UTC ISO.
+    const payload = {
+      outTime: jakartaInputToISO(closeForm.value.outTime),
+      note: closeForm.value.note || undefined
+    }
+    await guestVisitService.close(closingVisit.value.id, payload)
+    showToast('Kunjungan ditutup')
+    showCloseModal.value = false
+    await fetchVisits()
+  } catch (err) {
+    closeError.value = extractError(err, 'Gagal menutup kunjungan')
+  } finally {
+    savingClose.value = false
+  }
+}
+
+// ============ DERIVED ============
+function visitStatusInfo(v) {
+  if (v.outTime) return { label: 'closed', cls: 'bg-gray-100 text-gray-600' }
+  return { label: 'open', cls: 'bg-green-100 text-green-700' }
+}
+
+function resolvedGuestName(v) {
+  return v.guest?.name || guestNameById(v.guestId)
+}
+
+// ============ MOUNT ============
+onMounted(async () => {
+  await Promise.all([fetchVisits(), fetchGuests(), fetchAllGuestsForSelect()])
+})
 </script>
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6 flex-wrap gap-3 fade-up">
-      <h1 class="text-2xl font-bold text-gray-800">Manajemen Tamu 🌱</h1>
+    <!-- Toast -->
+    <transition name="fade-up">
+      <div
+        v-if="toast.show"
+        class="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm"
+        :class="toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
+      >
+        {{ toast.message }}
+      </div>
+    </transition>
+
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-3 fade-up">
+      <h1 class="text-xl font-bold text-gray-800">Manajemen Tamu 🌱</h1>
       <button
         v-if="activeTab === 'kunjungan'"
         @click="openCreateVisit"
-        class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
       >
         + Tambah Kunjungan
       </button>
       <button
         v-else
         @click="openCreateGuest"
-        class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
       >
         + Tambah Tamu
       </button>
     </div>
 
     <!-- Tabs -->
-    <div class="border-b border-gray-200 mb-6 fade-up" style="animation-delay: 80ms">
+    <div class="border-b border-gray-200 mb-3 fade-up" style="animation-delay: 80ms">
       <nav class="flex gap-6">
         <button
           @click="activeTab = 'kunjungan'"
-          class="py-3 text-sm font-medium border-b-2 transition-colors"
+          class="py-2 text-sm font-medium border-b-2 transition-colors"
           :class="activeTab === 'kunjungan' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
         >
           Daftar Kunjungan
         </button>
         <button
           @click="activeTab = 'tamu'"
-          class="py-3 text-sm font-medium border-b-2 transition-colors"
+          class="py-2 text-sm font-medium border-b-2 transition-colors"
           :class="activeTab === 'tamu' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
         >
           Data Tamu
@@ -199,85 +398,156 @@ function deleteGuest(id) {
       </nav>
     </div>
 
-    <!-- ================= TAB: KUNJUNGAN ================= -->
-    <div v-if="activeTab === 'kunjungan'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up tab-panel" style="animation-delay: 150ms">
+    <!-- ============ TAB: KUNJUNGAN ============ -->
+    <div v-if="activeTab === 'kunjungan'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
+      <!-- Filter bar.
+           Mobile: grid 2 kolom supaya control rapi rata, tombol Filter full-width.
+           Desktop (sm+): kembali ke flex-wrap inline. -->
+      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
+        <select v-model="visitStatus" title="Status" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="all">Status: Semua</option>
+          <option value="open">Status: Open</option>
+          <option value="closed">Status: Closed</option>
+        </select>
+        <select v-model="visitGuestId" title="Tamu" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="">Semua tamu</option>
+          <option v-for="g in allGuests" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+        <input v-model="visitFrom" type="date" title="Tanggal dari" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
+        <input v-model="visitTo" type="date" title="Tanggal sampai" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
+        <select v-model="visitSortBy" title="Urutkan berdasarkan" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="createdAt">Urut: Dibuat</option>
+          <option value="in">Urut: Jam Masuk</option>
+          <option value="out">Urut: Jam Keluar</option>
+        </select>
+        <select v-model="visitSortOrder" title="Arah" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="desc">Terbaru</option>
+          <option value="asc">Terlama</option>
+        </select>
+        <button @click="applyVisitDateFilter" class="col-span-2 sm:col-auto w-full sm:w-auto px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-green-700">
+          Filter
+        </button>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama Tamu</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">No. Telepon</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Jenis</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Host</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Waktu</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama Tamu</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Jam Masuk</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Jam Keluar</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
-            <tr v-for="visit in sortedVisits" :key="visit.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-800 font-medium whitespace-nowrap">
-                {{ getGuestById(visit.guestId)?.name || '-' }}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                {{ getGuestById(visit.guestId)?.phoneNumber || '-' }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-primary">
-                  {{ getTypeLabel(visit.type) }}
+            <tr v-if="loadingVisits">
+              <td colspan="6" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td>
+            </tr>
+            <tr v-else-if="!visits.length">
+              <td colspan="6" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada kunjungan.</td>
+            </tr>
+            <tr v-else v-for="v in visits" :key="v.id" class="hover:bg-gray-50">
+              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ resolvedGuestName(v) }}</td>
+              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(v.inTime) }}</td>
+              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(v.outTime) }}</td>
+              <td class="px-3 py-1.5 whitespace-nowrap">
+                <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="visitStatusInfo(v).cls">
+                  {{ visitStatusInfo(v).label }}
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
-                {{ getHostById(visit.hostUserId)?.name || '-' }}
+              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-xs truncate" :title="v.note || ''">{{ v.note || '-' }}</td>
+              <td class="px-3 py-1.5">
+                <div class="flex flex-wrap gap-1">
+                  <button v-if="!v.outTime" @click="openCloseModal(v)" class="action-btn action-btn-close" title="Tutup kunjungan">🔒</button>
+                  <button @click="openEditVisit(v)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
+                  <button @click="removeVisit(v)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
+                </div>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                {{ formatEventTime(visit.eventTime) }}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{{ visit.note || '-' }}</td>
-              <td class="px-6 py-4 space-x-2 whitespace-nowrap">
-                <button @click="openEditVisit(visit)" class="text-sm text-primary hover:underline">Ubah</button>
-                <button @click="deleteVisit(visit.id)" class="text-sm text-red-600 hover:underline">Hapus</button>
-              </td>
-            </tr>
-            <tr v-if="sortedVisits.length === 0">
-              <td colspan="7" class="px-6 py-8 text-center text-gray-400">Belum ada data kunjungan</td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <div
+        v-if="!loadingVisits && visits.length"
+        class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500"
+      >
+        <div>Halaman {{ visitPage }} dari {{ visitTotalPages }}</div>
+        <div class="flex gap-2">
+          <button :disabled="visitPage <= 1" @click="visitPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
+          <button :disabled="visitPage >= visitTotalPages" @click="visitPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+        </div>
+      </div>
     </div>
 
-    <!-- ================= TAB: DATA TAMU ================= -->
-    <div v-else class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up tab-panel" style="animation-delay: 150ms">
+    <!-- ============ TAB: DATA TAMU ============ -->
+    <div v-else class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
+      <!-- Mobile: search di atas full-width, 2 select sebar 2 kolom.
+           Desktop: search flex-1, select inline. -->
+      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
+        <input
+          v-model="guestSearch"
+          type="text"
+          placeholder="Cari nama / nomor..."
+          class="col-span-2 sm:col-auto sm:flex-1 sm:min-w-[180px] w-full min-w-0 px-3 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary"
+        />
+        <select v-model="guestSortBy" title="Urutkan berdasarkan" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="createdAt">Urut: Dibuat</option>
+          <option value="name">Urut: Nama</option>
+        </select>
+        <select v-model="guestSortOrder" title="Arah" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
+          <option value="desc">Terbaru</option>
+          <option value="asc">Terlama</option>
+        </select>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">No. Telepon</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">No. Telepon</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
+              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
-            <tr v-for="guest in guests" :key="guest.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-800 font-medium whitespace-nowrap">{{ guest.name }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{{ guest.phoneNumber || '-' }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500 max-w-md truncate">{{ guest.note || '-' }}</td>
-              <td class="px-6 py-4 space-x-2 whitespace-nowrap">
-                <button @click="openEditGuest(guest)" class="text-sm text-primary hover:underline">Ubah</button>
-                <button @click="deleteGuest(guest.id)" class="text-sm text-red-600 hover:underline">Hapus</button>
-              </td>
+            <tr v-if="loadingGuests">
+              <td colspan="4" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td>
             </tr>
-            <tr v-if="guests.length === 0">
-              <td colspan="4" class="px-6 py-8 text-center text-gray-400">Belum ada data tamu</td>
+            <tr v-else-if="!guests.length">
+              <td colspan="4" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada tamu.</td>
+            </tr>
+            <tr v-else v-for="g in guests" :key="g.id" class="hover:bg-gray-50">
+              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ g.name }}</td>
+              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ g.phoneNumber || '-' }}</td>
+              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-md truncate" :title="g.note || ''">{{ g.note || '-' }}</td>
+              <td class="px-3 py-1.5">
+                <div class="flex flex-wrap gap-1">
+                  <button @click="openEditGuest(g)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
+                  <button @click="removeGuest(g)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <div
+        v-if="!loadingGuests && guests.length"
+        class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500"
+      >
+        <div>Halaman {{ guestPage }} dari {{ guestTotalPages }}</div>
+        <div class="flex gap-2">
+          <button :disabled="guestPage <= 1" @click="guestPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
+          <button :disabled="guestPage >= guestTotalPages" @click="guestPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+        </div>
+      </div>
     </div>
 
-    <!-- ================= MODAL: VISIT ================= -->
+    <!-- ============ VISIT MODAL ============ -->
     <div
       v-if="showVisitModal"
       class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
@@ -288,54 +558,38 @@ function deleteGuest(id) {
           {{ editingVisit ? 'Ubah Kunjungan' : 'Tambah Kunjungan' }}
         </h3>
         <form @submit.prevent="saveVisit" class="space-y-4">
+          <div v-if="visitFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ visitFormError }}</div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tamu</label>
             <select
               v-model="visitForm.guestId"
               required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             >
               <option value="" disabled>Pilih tamu</option>
-              <option v-for="g in guests" :key="g.id" :value="g.id">{{ g.name }}</option>
+              <option v-for="g in allGuests" :key="g.id" :value="g.id">{{ g.name }}</option>
             </select>
-            <p class="text-xs text-gray-400 mt-1">
-              Tamu belum terdaftar? Tambahkan di tab "Data Tamu".
-            </p>
+            <p class="text-xs text-gray-400 mt-1">Tamu belum terdaftar? Tambahkan di tab "Data Tamu".</p>
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Host (Penerima)</label>
-            <select
-              v-model="visitForm.hostUserId"
-              required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            >
-              <option value="" disabled>Pilih host</option>
-              <option v-for="u in hostUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kunjungan</label>
-            <select
-              v-model="visitForm.type"
-              required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            >
-              <option v-for="t in guestVisitTypes" :key="t.value" :value="t.value">
-                {{ t.label }}
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Waktu Kunjungan</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jam Masuk</label>
             <input
-              v-model="visitForm.eventTime"
+              v-model="visitForm.inTime"
               type="datetime-local"
-              required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jam Keluar (opsional)</label>
+            <input
+              v-model="visitForm.outTime"
+              type="datetime-local"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+            />
+            <p class="text-xs text-gray-400 mt-1">Biarkan kosong jika tamu belum keluar — bisa ditutup nanti lewat tombol "Close".</p>
           </div>
 
           <div>
@@ -343,8 +597,7 @@ function deleteGuest(id) {
             <textarea
               v-model="visitForm.note"
               rows="3"
-              placeholder="Catatan tambahan (opsional)"
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
             ></textarea>
           </div>
 
@@ -352,23 +605,73 @@ function deleteGuest(id) {
             <button
               type="button"
               @click="showVisitModal = false"
-              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
               Batal
             </button>
             <button
               type="submit"
-              :disabled="visitLoading"
-              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              :disabled="savingVisit"
+              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
-              {{ visitLoading ? 'Menyimpan...' : 'Simpan' }}
+              {{ savingVisit ? 'Menyimpan...' : 'Simpan' }}
             </button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- ================= MODAL: GUEST ================= -->
+    <!-- ============ CLOSE MODAL ============ -->
+    <div
+      v-if="showCloseModal"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
+      @click.self="showCloseModal = false"
+    >
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-bold text-gray-800 mb-1">Tutup Kunjungan</h3>
+        <p class="text-sm text-gray-500 mb-4">
+          Tamu: <strong>{{ resolvedGuestName(closingVisit || {}) }}</strong>
+        </p>
+        <form @submit.prevent="submitClose" class="space-y-4">
+          <div v-if="closeError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ closeError }}</div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jam Keluar</label>
+            <input
+              v-model="closeForm.outTime"
+              type="datetime-local"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+            />
+            <p class="text-xs text-gray-400 mt-1">Kosong = pakai waktu server sekarang.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Catatan (opsional)</label>
+            <textarea
+              v-model="closeForm.note"
+              rows="2"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+            ></textarea>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              @click="showCloseModal = false"
+              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              :disabled="savingClose"
+              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {{ savingClose ? 'Menutup...' : 'Tutup Kunjungan' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ============ GUEST MODAL ============ -->
     <div
       v-if="showGuestModal"
       class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
@@ -379,6 +682,7 @@ function deleteGuest(id) {
           {{ editingGuest ? 'Ubah Data Tamu' : 'Tambah Data Tamu' }}
         </h3>
         <form @submit.prevent="saveGuest" class="space-y-4">
+          <div v-if="guestFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ guestFormError }}</div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
             <input
@@ -386,7 +690,7 @@ function deleteGuest(id) {
               type="text"
               required
               placeholder="Nama lengkap tamu"
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div>
@@ -395,7 +699,7 @@ function deleteGuest(id) {
               v-model="guestForm.phoneNumber"
               type="tel"
               placeholder="08xxxxxxxxxx"
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div>
@@ -403,24 +707,24 @@ function deleteGuest(id) {
             <textarea
               v-model="guestForm.note"
               rows="3"
-              placeholder="Informasi tambahan tentang tamu (opsional)"
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+              placeholder="Informasi tambahan (opsional)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
             ></textarea>
           </div>
           <div class="flex gap-3 pt-2">
             <button
               type="button"
               @click="showGuestModal = false"
-              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
               Batal
             </button>
             <button
               type="submit"
-              :disabled="guestLoading"
-              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              :disabled="savingGuest"
+              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
-              {{ guestLoading ? 'Menyimpan...' : 'Simpan' }}
+              {{ savingGuest ? 'Menyimpan...' : 'Simpan' }}
             </button>
           </div>
         </form>
@@ -443,60 +747,56 @@ function deleteGuest(id) {
   }
 }
 
-/* Baris tabel muncul satu per satu */
-tbody tr {
-  animation: rowFade 0.4s ease backwards;
+.fade-up-enter-active,
+.fade-up-leave-active {
+  transition: all 0.25s ease;
 }
-tbody tr:nth-child(1) { animation-delay: 200ms; }
-tbody tr:nth-child(2) { animation-delay: 260ms; }
-tbody tr:nth-child(3) { animation-delay: 320ms; }
-tbody tr:nth-child(4) { animation-delay: 380ms; }
-tbody tr:nth-child(5) { animation-delay: 440ms; }
-tbody tr:nth-child(n+6) { animation-delay: 500ms; }
-
-@keyframes rowFade {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.fade-up-enter-from,
+.fade-up-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
-/* Modal fade in */
-.fixed.inset-0 {
-  animation: modalBgFade 0.25s ease;
+/* ============ ACTION BUTTONS ============ */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
-
-.fixed.inset-0 > div {
-  animation: modalPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
-
-@keyframes modalBgFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.action-btn-edit {
+  background: #e8f5e9;
+  color: #2E7D32;
+  border-color: #c8e6c9;
 }
-
-@keyframes modalPop {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+.action-btn-edit:hover {
+  background: #c8e6c9;
 }
-
-/* Tab panel transition */
-.tab-panel {
-  transition: all 0.3s ease;
+.action-btn-close {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #e0e7ff;
 }
-
-/* Button lift on hover */
-button {
-  transition: all 0.2s ease;
+.action-btn-close:hover {
+  background: #e0e7ff;
+}
+.action-btn-delete {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.action-btn-delete:hover {
+  background: #fca5a5;
+  color: white;
 }
 </style>
