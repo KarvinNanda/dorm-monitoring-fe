@@ -40,20 +40,26 @@ const routes = [
         name: 'Tamu',
         component: () => import('@/modules/tamu/views/TamuPage.vue'),
         meta: { requiresAuth: true, roles: ['admin', 'resident', 'guest'] }
+      },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/modules/user/views/UserList.vue'),
+        meta: { requiresAuth: true, roles: ['admin'] }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/modules/user/views/ProfilePage.vue'),
+        meta: { requiresAuth: true }
       }
-      // Kendaraan & Users disembunyikan sementara — akan diaktifkan kembali
+      // Kendaraan disembunyikan sementara — akan diaktifkan kembali
       // saat fitur tersebut mulai dikembangkan.
       // {
       //   path: 'kendaraan',
       //   name: 'Kendaraan',
       //   component: () => import('@/modules/kendaraan/views/KendaraanPage.vue'),
       //   meta: { requiresAuth: true, roles: ['admin', 'resident', 'guest'] }
-      // },
-      // {
-      //   path: 'users',
-      //   name: 'Users',
-      //   component: () => import('@/modules/user/views/UserList.vue'),
-      //   meta: { requiresAuth: true, roles: ['admin'] }
       // }
     ]
   },

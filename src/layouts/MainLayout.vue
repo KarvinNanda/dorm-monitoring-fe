@@ -3,12 +3,15 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
 const router = useRouter()
 
 const user = computed(() => authStore.user)
-const role = computed(() => authStore.primaryRole)
+// Tampilkan semua role user (admin, resident, receptionist, dst.) sebagai chip,
+// bukan cuma primaryRole.
+const userRoles = computed(() => authStore.roles)
 
 const menuItems = computed(() => {
   // Semua menu bisa diakses oleh user login
@@ -16,9 +19,11 @@ const menuItems = computed(() => {
   const items = [
     { label: 'Dashboard', path: '/dashboard', icon: '🌿' },
     { label: 'Absensi', path: '/absen', icon: '🍃' },
-    { label: 'Tamu', path: '/tamu', icon: '🌱' }
+    { label: 'Tamu', path: '/tamu', icon: '🌱' },
+    { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] }
   ]
-  return items
+  // Filter menu yang butuh role spesifik
+  return items.filter((i) => !i.roles || authStore.hasAnyRole(i.roles))
 })
 
 const loggingOut = ref(false)
@@ -42,8 +47,12 @@ async function handleLogout() {
     <aside class="w-72 bg-white border-r border-gray-200 flex-col hidden md:flex">
       <!-- Header dengan tema pohon -->
       <div class="p-6 border-b border-gray-200">
-        <div class="flex items-center gap-2">
-          <span class="text-2xl animate-sway">🌲</span>
+        <div class="flex items-center gap-3">
+          <img
+            :src="logoUrl"
+            alt="Logo Sistem Internal"
+            class="w-10 h-10 object-contain animate-sway"
+          />
           <div>
             <h1 class="text-lg font-bold text-primary leading-tight">Sistem Internal</h1>
             <p class="text-xs text-gray-400">Tumbuh bersama kami</p>
@@ -80,10 +89,25 @@ async function handleLogout() {
       <div class="p-4 border-t border-gray-200">
         <div class="px-4 py-2 text-sm text-gray-500 mb-2">
           <div class="font-medium text-gray-700">{{ user?.name || 'Pengguna' }}</div>
-          <span class="mt-1 inline-block text-xs bg-green-100 text-primary px-2 py-0.5 rounded-full capitalize">
-            {{ role }}
-          </span>
+          <div class="mt-1 flex flex-wrap gap-1">
+            <span
+              v-for="r in userRoles"
+              :key="r"
+              class="text-xs bg-green-100 text-primary px-2 py-0.5 rounded-full capitalize"
+            >{{ r }}</span>
+            <span
+              v-if="!userRoles.length"
+              class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"
+            >tanpa role</span>
+          </div>
         </div>
+        <router-link
+          to="/profile"
+          class="w-full block px-4 py-2 text-sm text-primary hover:bg-green-50 rounded-lg transition-all duration-200 text-left hover:translate-x-1 mb-1"
+          active-class="bg-green-50 font-semibold"
+        >
+          👤 Profil Saya
+        </router-link>
         <button
           @click="handleLogout"
           class="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 text-left hover:translate-x-1"
@@ -96,10 +120,17 @@ async function handleLogout() {
     <!-- ============ HEADER MOBILE ============ -->
     <div class="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50 p-4 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span class="text-xl animate-sway">🌲</span>
+        <img
+          :src="logoUrl"
+          alt="Logo Sistem Internal"
+          class="w-8 h-8 object-contain animate-sway"
+        />
         <h1 class="text-lg font-bold text-primary">Sistem Internal</h1>
       </div>
-      <button @click="handleLogout" class="text-sm text-red-600">Keluar</button>
+      <div class="flex items-center gap-3">
+        <router-link to="/profile" class="text-sm text-primary font-medium">👤 Profil</router-link>
+        <button @click="handleLogout" class="text-sm text-red-600">Keluar</button>
+      </div>
     </div>
 
     <!-- ============ NAV BAWAH MOBILE ============ -->

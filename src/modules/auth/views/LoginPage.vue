@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -55,7 +56,11 @@ async function handleLogin() {
 <template>
   <div class="bg-white rounded-2xl shadow-lg p-8">
     <div class="text-center mb-8">
-      <div class="text-4xl mb-2">🌲</div>
+      <img
+        :src="logoUrl"
+        alt="Logo Sistem Internal"
+        class="w-16 h-16 mx-auto mb-3 object-contain"
+      />
       <h1 class="text-2xl font-bold text-primary">Sistem Internal</h1>
       <p class="text-gray-500 mt-2">Masuk ke akun Anda</p>
     </div>

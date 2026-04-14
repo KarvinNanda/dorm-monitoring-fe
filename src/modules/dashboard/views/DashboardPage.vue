@@ -2,25 +2,24 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { dummyGuestVisits, dummyGuests } from '@/utils/dummyData'
+import { formatDateLong, todayJakartaDate } from '@/utils/dateFormat'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
-const primaryRole = computed(() => authStore.primaryRole)
+// Tampilkan SEMUA role yang dimiliki user (admin / resident / receptionist / dll.)
+const userRoles = computed(() => authStore.roles)
 
-const today = new Date().toISOString().split('T')[0]
+// "Hari ini" dihitung di zona WIB supaya konsisten untuk user Indonesia,
+// bukan timezone sistem user / UTC.
+const today = todayJakartaDate()
 
 const kunjunganHariIni = computed(() =>
-  dummyGuestVisits.filter((v) => v.eventTime.startsWith(today)).length
+  dummyGuestVisits.filter((v) => todayJakartaDate(v.eventTime) === today).length
 )
 
 const totalTamuTerdaftar = computed(() => dummyGuests.length)
 
-const tanggalHariIni = new Date().toLocaleDateString('id-ID', {
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
+const tanggalHariIni = formatDateLong()
 </script>
 
 <template>
@@ -76,7 +75,17 @@ const tanggalHariIni = new Date().toLocaleDateString('id-ID', {
         </div>
         <div>
           <p class="text-xs text-gray-400">Peran</p>
-          <p class="text-sm font-medium text-primary capitalize">{{ primaryRole }}</p>
+          <div class="mt-0.5 flex flex-wrap gap-1">
+            <span
+              v-for="r in userRoles"
+              :key="r"
+              class="text-xs bg-green-100 text-primary px-2 py-0.5 rounded-full capitalize font-medium"
+            >{{ r }}</span>
+            <span
+              v-if="!userRoles.length"
+              class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"
+            >tanpa role</span>
+          </div>
         </div>
       </div>
     </div>

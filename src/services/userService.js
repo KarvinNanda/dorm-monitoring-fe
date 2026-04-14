@@ -21,10 +21,14 @@ function unwrapSingle(response) {
 
 export const userService = {
   /**
-   * GET /users (Admin) - list dengan pagination
+   * GET /users (Admin) - list dengan pagination, sort, search
    */
-  async list({ page = 1, limit = 10 } = {}) {
-    const response = await api.get('/users', { params: { page, limit } })
+  async list({ page = 1, limit = 10, sortBy, sortOrder, search } = {}) {
+    const params = { page, limit }
+    // if (sortBy) params.sortBy = sortBy
+    // if (sortOrder) params.sortOrder = sortOrder
+    // if (search) params.search = search
+    const response = await api.get('/user', { params })
     return unwrap(response)
   },
 
