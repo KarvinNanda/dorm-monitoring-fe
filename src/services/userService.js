@@ -25,9 +25,9 @@ export const userService = {
    */
   async list({ page = 1, limit = 10, sortBy, sortOrder, search } = {}) {
     const params = { page, limit }
-    // if (sortBy) params.sortBy = sortBy
-    // if (sortOrder) params.sortOrder = sortOrder
-    // if (search) params.search = search
+    if (sortBy) params.sortBy = sortBy
+    if (sortOrder) params.sortOrder = sortOrder
+    if (search) params.search = search
     const response = await api.get('/user', { params })
     return unwrap(response)
   },

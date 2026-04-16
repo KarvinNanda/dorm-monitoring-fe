@@ -24,7 +24,7 @@ export const guestService = {
   async list({ page = 1, limit = 10, search, sortBy, sortOrder } = {}) {
     const params = { page, limit }
     if (search) params.search = search
-    // if (sortBy) params.sortBy = sortBy
+    if (sortBy) params.sortBy = sortBy
     if (sortOrder) params.sortOrder = sortOrder
     const response = await api.get('/guest', { params })
     return unwrapList(response)
