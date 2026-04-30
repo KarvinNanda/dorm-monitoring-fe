@@ -50,30 +50,36 @@ describe('MainLayout — menu visibility per role', () => {
     expect(wrapper.text()).toContain('Fasilitas')
   })
 
-  it('resident TIDAK melihat menu Users (admin-only)', () => {
-    loginAs('resident')
-    const wrapper = mount(MainLayout, mountOpts)
-    expect(wrapper.text()).not.toContain('Users')
-    // tetap melihat menu publik
-    expect(wrapper.text()).toContain('Dashboard')
-    expect(wrapper.text()).toContain('Fasilitas')
-  })
-
-  it('receptionist tidak lihat Users tapi lihat Inventaris', () => {
-    loginAs('receptionist')
-    const wrapper = mount(MainLayout, mountOpts)
-    expect(wrapper.text()).not.toContain('Users')
-    expect(wrapper.text()).toContain('Inventaris')
-  })
-
-  it('semua role login melihat menu Dashboard, Absensi, Tamu, Fasilitas', () => {
+  it('resident: lihat Dashboard, Absensi, Inventaris — tidak lihat Tamu/Fasilitas/Users', () => {
     loginAs('resident')
     const wrapper = mount(MainLayout, mountOpts)
     const text = wrapper.text()
     expect(text).toContain('Dashboard')
     expect(text).toContain('Absensi')
+    expect(text).toContain('Inventaris')
+    expect(text).not.toContain('Tamu')
+    expect(text).not.toContain('Fasilitas')
+    expect(text).not.toContain('Users')
+  })
+
+  it('receptionist: lihat Dashboard, Tamu, Inventaris — tidak lihat Absensi/Fasilitas/Users', () => {
+    loginAs('receptionist')
+    const wrapper = mount(MainLayout, mountOpts)
+    const text = wrapper.text()
+    expect(text).toContain('Dashboard')
     expect(text).toContain('Tamu')
-    expect(text).toContain('Fasilitas')
+    expect(text).toContain('Inventaris')
+    expect(text).not.toContain('Absensi')
+    expect(text).not.toContain('Fasilitas')
+    expect(text).not.toContain('Users')
+  })
+
+  it('semua role login melihat menu Dashboard', () => {
+    for (const role of ['admin', 'resident', 'receptionist', 'guest']) {
+      loginAs(role)
+      const wrapper = mount(MainLayout, mountOpts)
+      expect(wrapper.text(), `role ${role} harus lihat Dashboard`).toContain('Dashboard')
+    }
   })
 
   it('logout: panggil authService.logout, clearAuth, redirect /login', async () => {

@@ -4,11 +4,11 @@ Frontend aplikasi internal untuk monitoring dorm, dibangun dengan **Vue 3**, **V
 
 Menu yang sudah aktif:
 - 🌿 **Dashboard** — ringkasan info akun & statistik
-- 🍃 **Absensi** — tap in / tap out harian (resident) + manual entry & status terkini (admin)
+- 🍃 **Absensi** — tap in / tap out harian + manual entry & status terkini
 - 🌱 **Tamu** — manajemen data tamu & catatan kunjungan
-- 👥 **Users** — manajemen akun, role, aktivasi (admin only)
-- 📦 **Inventaris** — item, kategori, transaksi stok (admin), read-only untuk resident & receptionist
-- 🏛️ **Fasilitas** — daftar fasilitas + reservasi (admin write, semua role read)
+- 👥 **Users** — manajemen akun, role, aktivasi
+- 📦 **Inventaris** — item, kategori, transaksi stok
+- 🏛️ **Fasilitas** — daftar fasilitas + reservasi 
 - 👤 **Profil** — kelola akun sendiri & ganti password
 
 ---
@@ -186,8 +186,16 @@ my-app/
 
 ## 🛡️ Permission Gating
 
-UI menyembunyikan tombol create / update / delete dan menu yang user tidak
-punya akses (sesuai role matrix backend). Backend tetap jadi otoritas final.
+Tiga lapis gating, dari paling longgar ke paling ketat:
+
+1. **Backend** (otoritas final) — sesuai dokumen API V1–V4
+2. **Route guard** (`src/router/index.js` + `routes.js`) — cegah direct-URL
+   access bila role tidak sesuai
+3. **Menu visibility** (`src/layouts/MainLayout.vue`) — sembunyikan menu
+   yang biasanya tidak relevan untuk role tersebut, walau secara teknis
+   mungkin masih punya read access di backend
+
+### Resource × Role (backend)
 
 | Resource              | Read                          | Write (C/U/D)  |
 | --------------------- | ----------------------------- | -------------- |
@@ -198,6 +206,28 @@ punya akses (sesuai role matrix backend). Backend tetap jadi otoritas final.
 | Item Transaction      | **Admin only**                | **Admin only** |
 | Facility              | Semua                         | **Admin only** |
 | Facility Reservation  | Semua                         | **Admin only** |
+
+### Menu visibility per role (sidebar / bottom-nav)
+
+Menu di-filter di `MainLayout.vue` berdasarkan `meta.roles` per item. Bila
+sebuah role tidak relevan secara workflow, menu-nya disembunyikan walau
+backend mungkin mengizinkan akses.
+
+| Menu        | Admin | Receptionist | Resident | Guest |
+| ----------- | :---: | :----------: | :------: | :---: |
+| Dashboard   | ✅    | ✅           | ✅       | ✅    |
+| Absensi     | ✅    | —            | ✅       | —     |
+| Tamu        | ✅    | ✅           | —        | —     |
+| Inventaris  | ✅    | ✅           | ✅       | —     |
+| Fasilitas   | ✅    | —            | —        | —     |
+| Users       | ✅    | —            | —        | —     |
+| Profil      | ✅    | ✅           | ✅       | ✅    |
+
+> Catatan: route guard di `routes.js` lebih longgar dari menu visibility
+> untuk beberapa rute (mis. `/facility` di-allow semua role login di route
+> guard, tetapi menu hanya muncul untuk admin). Ini disengaja — admin bisa
+> share link langsung ke role lain tanpa di-block, tapi normal navigation
+> tidak menampilkan menu yang biasanya tidak relevan.
 
 > ⚠️ Catatan API path: backend pakai **path singular** (`/user`, `/role`,
 > `/item`, dst.) — bukan plural seperti yang dicantumkan dokumen V1.
@@ -262,12 +292,6 @@ __tests__/
 
 **199 tests / 26 files / 100% passing.** Jalankan `npm test` untuk verifikasi.
 
-### Mengapa folder `__tests__/` di-gitignore
-
-Layer test sengaja **tidak di-track git** (lihat `.gitignore`) supaya file
-test tidak ter-commit / ter-modifikasi tidak sengaja. Untuk menjalankan
-test, folder `__tests__/` harus ada secara lokal — minta dari maintainer
-bila baru clone tanpa folder ini.
 
 ### Pola test
 

@@ -36,10 +36,8 @@ describe('router routes', () => {
     expect(dash.meta?.roles).toBeUndefined()
   })
 
-  it('rute Absen & Tamu mengizinkan receptionist', () => {
-    const absen = all.find((r) => r.name === 'Absen')
+  it('rute Tamu mengizinkan receptionist (route guard lebih longgar dari menu)', () => {
     const tamu = all.find((r) => r.name === 'Tamu')
-    expect(absen.meta?.roles).toContain('receptionist')
     expect(tamu.meta?.roles).toContain('receptionist')
   })
 
