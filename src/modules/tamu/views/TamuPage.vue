@@ -429,7 +429,8 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="overflow-x-auto">
+      <!-- DESKTOP table -->
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -470,6 +471,34 @@ onMounted(async () => {
         </table>
       </div>
 
+      <!-- MOBILE card list -->
+      <div class="md:hidden">
+        <div v-if="loadingVisits" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
+        <div v-else-if="!visits.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada kunjungan.</div>
+        <ul v-else class="divide-y divide-gray-200">
+          <li v-for="v in visits" :key="v.id" class="px-3 py-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-gray-800 truncate">{{ resolvedGuestName(v) }}</div>
+              </div>
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="visitStatusInfo(v).cls">
+                {{ visitStatusInfo(v).label }}
+              </span>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-1 text-xs text-gray-500">
+              <div><span class="text-gray-400">Masuk</span><br /><span class="text-gray-700">{{ formatDate(v.inTime) }}</span></div>
+              <div><span class="text-gray-400">Keluar</span><br /><span class="text-gray-700">{{ formatDate(v.outTime) }}</span></div>
+            </div>
+            <div v-if="v.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ v.note }}</div>
+            <div class="mt-2 flex flex-wrap gap-1">
+              <button v-if="!v.outTime" @click="openCloseModal(v)" class="action-btn action-btn-close">🔒 Tutup</button>
+              <button @click="openEditVisit(v)" class="action-btn action-btn-edit">✏️ Ubah</button>
+              <button @click="removeVisit(v)" class="action-btn action-btn-delete">🗑️ Hapus</button>
+            </div>
+          </li>
+        </ul>
+      </div>
+
       <div
         v-if="!loadingVisits && visits.length"
         class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500"
@@ -503,7 +532,8 @@ onMounted(async () => {
         </select>
       </div>
 
-      <div class="overflow-x-auto">
+      <!-- DESKTOP table -->
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -533,6 +563,27 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- MOBILE card list -->
+      <div class="md:hidden">
+        <div v-if="loadingGuests" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
+        <div v-else-if="!guests.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada tamu.</div>
+        <ul v-else class="divide-y divide-gray-200">
+          <li v-for="g in guests" :key="g.id" class="px-3 py-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-gray-800 truncate">{{ g.name }}</div>
+                <div v-if="g.phoneNumber" class="mt-0.5 text-xs text-gray-500">📞 {{ g.phoneNumber }}</div>
+                <div v-if="g.note" class="mt-1 text-xs text-gray-500 line-clamp-2">{{ g.note }}</div>
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1">
+              <button @click="openEditGuest(g)" class="action-btn action-btn-edit">✏️ Ubah</button>
+              <button @click="removeGuest(g)" class="action-btn action-btn-delete">🗑️ Hapus</button>
+            </div>
+          </li>
+        </ul>
       </div>
 
       <div

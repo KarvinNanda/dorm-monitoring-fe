@@ -362,9 +362,10 @@ function toggleRoleId(id, listRef) {
       </div>
     </transition>
 
-    <!-- ============ TABLE ============ -->
+    <!-- ============ TABLE / LIST ============ -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- DESKTOP table -->
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -456,6 +457,49 @@ function toggleRoleId(id, listRef) {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- MOBILE card list -->
+      <div class="md:hidden">
+        <div v-if="loadingList" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat data...</div>
+        <div v-else-if="listError" class="px-4 py-6 text-center text-red-500 text-sm">{{ listError }}</div>
+        <div v-else-if="!visibleUsers.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada user.</div>
+        <ul v-else class="divide-y divide-gray-200">
+          <li v-for="user in visibleUsers" :key="user.id" class="px-3 py-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-gray-800 truncate">{{ user.name }}</div>
+                <div class="text-xs text-gray-500 truncate">{{ user.email }}</div>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <span
+                    v-for="rn in roleNames(user)"
+                    :key="rn"
+                    class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-primary capitalize"
+                  >{{ rn }}</span>
+                  <span v-if="!roleNames(user).length" class="text-xs text-gray-400">—</span>
+                </div>
+              </div>
+              <span
+                class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
+                :class="isActive(user) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
+              >{{ isActive(user) ? 'active' : 'inactive' }}</span>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1">
+              <button @click="openEdit(user)" class="action-btn action-btn-edit"><span>✏️</span><span>Edit</span></button>
+              <button @click="openRolesModal(user)" class="action-btn action-btn-role"><span>🛡️</span><span>Role</span></button>
+              <button @click="openPasswordModal(user)" class="action-btn action-btn-password"><span>🔑</span><span>Password</span></button>
+              <button
+                @click="toggleActivation(user)"
+                class="action-btn"
+                :class="isActive(user) ? 'action-btn-deactivate' : 'action-btn-activate'"
+              >
+                <span>{{ isActive(user) ? '⛔' : '✅' }}</span>
+                <span>{{ isActive(user) ? 'Deactivate' : 'Activate' }}</span>
+              </button>
+              <button @click="removeUser(user)" class="action-btn action-btn-delete"><span>🗑️</span><span>Hapus</span></button>
+            </div>
+          </li>
+        </ul>
       </div>
 
       <!-- Pagination -->

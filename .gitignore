@@ -13,6 +13,11 @@ dist-ssr
 *.local
 .claude
 
+# Unit test layer — di-ignore sesuai permintaan (tidak di-track git supaya
+# file test tidak ter-commit / ter-modifikasi tidak sengaja).
+# Untuk menjalankan test, folder __tests__/ harus ada secara lokal.
+coverage
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
