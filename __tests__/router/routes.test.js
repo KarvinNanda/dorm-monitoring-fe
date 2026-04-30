@@ -27,10 +27,20 @@ describe('router routes', () => {
     expect(login.meta?.requiresAuth).toBe(false)
   })
 
-  it('rute Dashboard butuh auth', () => {
+  it('rute Dashboard butuh auth dan TANPA gate role (fallback aman)', () => {
     const dash = all.find((r) => r.name === 'Dashboard')
     expect(dash).toBeDefined()
     expect(dash.meta?.requiresAuth).toBe(true)
+    // Dashboard sengaja tanpa roles — dipakai sebagai fallback redirect
+    // dari guard, jadi semua role login harus boleh masuk (cegah loop).
+    expect(dash.meta?.roles).toBeUndefined()
+  })
+
+  it('rute Absen & Tamu mengizinkan receptionist', () => {
+    const absen = all.find((r) => r.name === 'Absen')
+    const tamu = all.find((r) => r.name === 'Tamu')
+    expect(absen.meta?.roles).toContain('receptionist')
+    expect(tamu.meta?.roles).toContain('receptionist')
   })
 
   it('rute Users dibatasi role admin', () => {

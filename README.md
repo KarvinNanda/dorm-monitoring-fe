@@ -2,10 +2,14 @@
 
 Frontend aplikasi internal untuk monitoring dorm, dibangun dengan **Vue 3**, **Vite**, **Tailwind CSS**, **Vue Router**, dan **Pinia**.
 
-Saat ini fokus pengembangan ada di tiga menu utama:
+Menu yang sudah aktif:
 - 🌿 **Dashboard** — ringkasan info akun & statistik
-- 🍃 **Absensi** — tap in / tap out harian
+- 🍃 **Absensi** — tap in / tap out harian (resident) + manual entry & status terkini (admin)
 - 🌱 **Tamu** — manajemen data tamu & catatan kunjungan
+- 👥 **Users** — manajemen akun, role, aktivasi (admin only)
+- 📦 **Inventaris** — item, kategori, transaksi stok (admin), read-only untuk resident & receptionist
+- 🏛️ **Fasilitas** — daftar fasilitas + reservasi (admin write, semua role read)
+- 👤 **Profil** — kelola akun sendiri & ganti password
 
 ---
 
@@ -66,6 +70,11 @@ Gunakan akun yang sudah terdaftar di backend API. Pastikan backend API sudah **b
 | `npm run dev` | Jalankan development server (hot reload) |
 | `npm run build` | Build aplikasi untuk production ke folder `dist/` |
 | `npm run preview` | Preview hasil build production secara lokal |
+| `npm test` | Jalankan seluruh suite test (Vitest) sekali |
+| `npm run test:watch` | Watch mode untuk TDD |
+| `npm run test:coverage` | Generate coverage report (text + html ke `coverage/`) |
+| `npm run test:security` | Hanya jalankan security suite (audit + pattern scan) |
+| `npm run audit` | Alias untuk `npm audit` |
 
 ---
 
@@ -94,22 +103,34 @@ my-app/
 │   ├── layouts/
 │   │   ├── MainLayout.vue       # Layout utama (sidebar + konten)
 │   │   └── AuthLayout.vue       # Layout halaman login
-│   ├── modules/                 # Fitur per modul
+│   ├── modules/                 # Fitur per modul (lazy-loaded)
 │   │   ├── auth/views/          # LoginPage
 │   │   ├── dashboard/views/     # DashboardPage
-│   │   ├── absen/views/         # AbsenPage
-│   │   └── tamu/views/          # TamuPage
+│   │   ├── absen/views/         # AbsenPage (resident + admin section)
+│   │   ├── tamu/views/          # TamuPage (visit + guest tabs)
+│   │   ├── user/views/          # UserList + ProfilePage
+│   │   ├── inventory/views/     # InventoryPage (items + categories + transactions)
+│   │   └── facility/views/      # FacilityPage (facilities + reservations)
 │   ├── router/
-│   │   ├── index.js             # Router config + navigation guard
-│   │   └── routes.js             # Daftar route
-│   ├── services/
-│   │   ├── api.js               # Axios instance + interceptor
-│   │   ├── authService.js       # Auth API (login, logout, refresh, me)
-│   │   └── userService.js       # User management API
+│   │   ├── index.js             # Router config + navigation guard (auth + role)
+│   │   └── routes.js            # Daftar route
+│   ├── services/                # 1 file per resource API, axios di-mock-able
+│   │   ├── api.js               # Axios instance + 401-refresh interceptor
+│   │   ├── authService.js       # /auth/login, /auth/refresh, /user/me
+│   │   ├── userService.js       # /user, /role
+│   │   ├── checkLogService.js   # /check-log
+│   │   ├── guestService.js      # /guest
+│   │   ├── guestVisitService.js # /guest-visit
+│   │   ├── itemService.js       # /item, /item/:id/transactions
+│   │   ├── itemCategoryService.js
+│   │   ├── itemTransactionService.js  # /item-transaction (admin only)
+│   │   ├── facilityService.js
+│   │   └── facilityReservationService.js
 │   ├── stores/
-│   │   └── authStore.js         # Pinia store untuk auth
+│   │   └── authStore.js         # Pinia store: user, tokens, hasRole / hasAnyRole
 │   ├── utils/
-│   │   └── dummyData.js         # Data dummy (Guest, GuestVisit)
+│   │   ├── dateFormat.js        # WIB (Asia/Jakarta) lock
+│   │   └── dummyData.js         # Seed lokal untuk dashboard counter
 │   ├── App.vue
 │   ├── main.js                  # Entry point
 │   └── style.css                # Global styles + Tailwind directives
@@ -151,12 +172,109 @@ my-app/
 | Fitur | Status | Data Source |
 |-------|--------|-------------|
 | Login / Logout | ✅ Selesai | API real |
-| Refresh Token | ✅ Selesai | API real |
-| Dashboard | ✅ Selesai | Sebagian dummy |
-| Absensi (tap in/out) | 🟡 UI only | Dummy (belum ada endpoint) |
-| Manajemen Tamu | 🟡 UI only | Dummy (belum ada endpoint) |
-| Manajemen User | 🔒 Disembunyikan | Menunggu dikembangkan |
+| Refresh Token (auto-retry 401) | ✅ Selesai | API real |
+| Dashboard | ✅ Selesai | User dari API, counter dari dummy |
+| Absensi (tap in/out, manual entry, riwayat) | ✅ Selesai | API real (`/check-log`) |
+| Manajemen Tamu (guest + visit + close) | ✅ Selesai | API real (`/guest`, `/guest-visit`) |
+| Manajemen User (CRUD, role assign, activate, reset password) | ✅ Selesai | API real (`/user`, `/role`) |
+| Profil Saya (update + ganti password) | ✅ Selesai | API real |
+| Inventaris (item, kategori, transaksi) | ✅ Selesai | API real (`/item`, `/item-category`, `/item-transaction`) |
+| Fasilitas + Reservasi | ✅ Selesai | API real (`/facility`, `/facility-reservation`) |
 | Kendaraan | 🔒 Disembunyikan | Menunggu dikembangkan |
+
+---
+
+## 🛡️ Permission Gating
+
+UI menyembunyikan tombol create / update / delete dan menu yang user tidak
+punya akses (sesuai role matrix backend). Backend tetap jadi otoritas final.
+
+| Resource              | Read                          | Write (C/U/D)  |
+| --------------------- | ----------------------------- | -------------- |
+| User & Role           | Admin                         | Admin          |
+| Check Log             | Resident (own), Admin (all)   | Admin (manual) |
+| Guest & Guest Visit   | Semua                         | Admin          |
+| Item & Item Category  | Admin, Receptionist, Resident | **Admin only** |
+| Item Transaction      | **Admin only**                | **Admin only** |
+| Facility              | Semua                         | **Admin only** |
+| Facility Reservation  | Semua                         | **Admin only** |
+
+> ⚠️ Catatan API path: backend pakai **path singular** (`/user`, `/role`,
+> `/item`, dst.) — bukan plural seperti yang dicantumkan dokumen V1.
+
+---
+
+## 📱 Mobile Responsive
+
+Semua halaman bertabel punya **dua tampilan**:
+
+- **Desktop (≥ 768px)** — tabel klasik dengan `hidden md:block`
+- **Mobile (< 768px)** — daftar kartu vertikal dengan `md:hidden` (no horizontal scroll)
+
+Kartu mobile menampilkan field utama secara vertikal, badge/status di kanan
+atas, dan tombol aksi dengan label teks (mis. `✏️ Ubah` bukan hanya `✏️`)
+agar nyaman ditekan dengan jari.
+
+---
+
+## 🧪 Test Suite
+
+Stack: **Vitest 4** + happy-dom + @vue/test-utils + @vitest/coverage-v8.
+
+### Layout
+
+```
+__tests__/
+├── vitest.config.js
+├── setup.js                      # reset Pinia + localStorage tiap test
+├── utils/dateFormat.test.js
+├── stores/authStore.test.js
+├── router/routes.test.js
+├── services/                     # mock axios per service
+│   ├── api.test.js               # request/response interceptor + refresh flow
+│   ├── authService.test.js
+│   ├── userService.test.js
+│   ├── checkLogService.test.js
+│   ├── guestService.test.js
+│   ├── guestVisitService.test.js
+│   ├── itemService.test.js
+│   ├── itemCategoryService.test.js
+│   ├── itemTransactionService.test.js
+│   ├── facilityService.test.js
+│   └── facilityReservationService.test.js
+├── components/                   # smoke + interaction tests halaman
+│   ├── LoginPage.test.js
+│   ├── DashboardPage.test.js
+│   ├── ProfilePage.test.js
+│   ├── TamuPage.test.js
+│   ├── AbsenPage.test.js
+│   ├── UserList.test.js
+│   ├── InventoryPage.test.js     # + permission gating non-admin
+│   ├── FacilityPage.test.js      # + permission gating non-admin
+│   └── MainLayout.test.js        # role-based menu visibility + logout
+└── security/
+    ├── dependencies.test.js      # npm audit + lockfile sanity + secret scan
+    ├── code-patterns.test.js     # eval / innerHTML / v-html / hardcoded creds
+    └── token-handling.test.js    # clearAuth completeness, no console.log(token)
+```
+
+### Status
+
+**199 tests / 26 files / 100% passing.** Jalankan `npm test` untuk verifikasi.
+
+### Mengapa folder `__tests__/` di-gitignore
+
+Layer test sengaja **tidak di-track git** (lihat `.gitignore`) supaya file
+test tidak ter-commit / ter-modifikasi tidak sengaja. Untuk menjalankan
+test, folder `__tests__/` harus ada secara lokal — minta dari maintainer
+bila baru clone tanpa folder ini.
+
+### Pola test
+
+- **Service test**: `vi.mock('@/services/api', () => ({ default: { get, post, ... } }))` lalu assert `api.get` dipanggil dengan path + params yang benar.
+- **Component test**: `mount` via @vue/test-utils, mock service modules, helper `loginAs(role)` untuk seed authStore.
+- **Permission gating test**: tiap halaman dengan tombol RW punya describe block "permission gating (non-admin)" yang verifikasi tombol Create/Update/Delete absen di DOM.
+- **Security test**: regex-scan `src/` untuk pola berbahaya; jalankan `npm audit --json` dan fail bila ada vulnerability HIGH/CRITICAL.
 
 ---
 
@@ -229,8 +347,10 @@ fix: perbaiki token refresh loop saat session expired
 - Semua teks UI menggunakan **Bahasa Indonesia**
 - Primary color: `#2E7D32` (hijau), Secondary: `#6D4C41` (coklat)
 - Tema visual sidebar menggunakan nuansa pohon (tree structure)
-- Menu Kendaraan & Users disembunyikan sementara sampai fitur tersebut mulai dikembangkan
-- Data dummy Tamu & Absen ada di `src/utils/dummyData.js` — hapus & ganti dengan service API kalau endpoint sudah tersedia
+- Menu **Kendaraan** masih disembunyikan sampai fitur tersebut mulai dikembangkan
+- Datetime selalu tampil di **WIB (Asia/Jakarta)** lewat util di `src/utils/dateFormat.js` — jangan pakai `toLocaleString()` mentah
+- Hanya `src/stores/authStore.js` yang boleh menulis `accessToken`/`refreshToken` ke `localStorage` (di-enforce oleh test `__tests__/security/code-patterns.test.js`)
+- Data dummy Dashboard counter ada di `src/utils/dummyData.js` — hapus & ganti dengan service API kalau endpoint statistik sudah tersedia
 
 ---
 

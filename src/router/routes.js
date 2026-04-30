@@ -27,7 +27,9 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/modules/dashboard/views/DashboardPage.vue'),
-        meta: { requiresAuth: true, roles: ['admin', 'resident', 'guest'] }
+        // Tidak ada gate role di dashboard — semua user login boleh akses
+        // (jangan kunci dashboard, karena ini target fallback dari guard).
+        meta: { requiresAuth: true }
       },
       {
         path: 'absen',
@@ -39,7 +41,7 @@ const routes = [
         path: 'tamu',
         name: 'Tamu',
         component: () => import('@/modules/tamu/views/TamuPage.vue'),
-        meta: { requiresAuth: true, roles: ['admin', 'resident', 'guest'] }
+        meta: { requiresAuth: true, roles: ['admin', 'resident', 'receptionist', 'guest'] }
       },
       {
         path: 'users',

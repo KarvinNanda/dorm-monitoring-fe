@@ -18,10 +18,10 @@ const menuItems = computed(() => {
   // (filter per-role bisa diaktifkan lagi setelah role API diketahui)
   const items = [
     { label: 'Dashboard', path: '/dashboard', icon: '🌿' },
-    { label: 'Absensi', path: '/absen', icon: '🍃' },
-    { label: 'Tamu', path: '/tamu', icon: '🌱' },
+    { label: 'Absensi', path: '/absen', icon: '🍃',roles: ['admin', 'resident'] },
+    { label: 'Tamu', path: '/tamu', icon: '🌱' ,roles: ['admin', 'receptionist']},
     { label: 'Inventaris', path: '/inventory', icon: '📦', roles: ['admin', 'receptionist', 'resident'] },
-    { label: 'Fasilitas', path: '/facility', icon: '🏛️' },
+    { label: 'Fasilitas', path: '/facility', icon: '🏛️' ,roles: ['admin']},
     { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] }
   ]
   // Filter menu yang butuh role spesifik
