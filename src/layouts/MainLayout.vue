@@ -20,6 +20,8 @@ const menuItems = computed(() => {
     { label: 'Dashboard', path: '/dashboard', icon: '🌿' },
     { label: 'Absensi', path: '/absen', icon: '🍃' },
     { label: 'Tamu', path: '/tamu', icon: '🌱' },
+    { label: 'Inventaris', path: '/inventory', icon: '📦', roles: ['admin', 'receptionist', 'resident'] },
+    { label: 'Fasilitas', path: '/facility', icon: '🏛️' },
     { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] }
   ]
   // Filter menu yang butuh role spesifik

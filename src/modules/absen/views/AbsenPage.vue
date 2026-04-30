@@ -431,7 +431,8 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div class="overflow-x-auto">
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -458,6 +459,25 @@ onMounted(async () => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- MOBILE card list -->
+        <div class="md:hidden">
+          <div v-if="loadingMyHistory" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
+          <div v-else-if="!myHistory.length" class="px-4 py-6 text-center text-gray-400 text-sm">Belum ada riwayat.</div>
+          <ul v-else class="divide-y divide-gray-200">
+            <li v-for="row in myHistory" :key="row.id" class="px-4 py-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="text-xs text-gray-700">{{ formatDate(row.time) }}</div>
+                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
+                </div>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
+                  {{ row.type }}
+                </span>
+              </div>
+            </li>
+          </ul>
         </div>
 
         <div
@@ -515,7 +535,8 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div class="overflow-x-auto">
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -544,6 +565,26 @@ onMounted(async () => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- MOBILE card list -->
+        <div class="md:hidden">
+          <div v-if="loadingLatest" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
+          <div v-else-if="!latestList.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada data.</div>
+          <ul v-else class="divide-y divide-gray-200">
+            <li v-for="row in latestList" :key="row.id || row.userId" class="px-4 py-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-gray-800 truncate">{{ userNameFromEntry(row) }}</div>
+                  <div class="mt-0.5 text-xs text-gray-500">{{ formatDate(row.time) }}</div>
+                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
+                </div>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
+                  {{ row.type || '—' }}
+                </span>
+              </div>
+            </li>
+          </ul>
         </div>
 
         <div
@@ -579,7 +620,8 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div class="overflow-x-auto">
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -611,6 +653,27 @@ onMounted(async () => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- MOBILE card list -->
+        <div class="md:hidden">
+          <div v-if="!selectedUserId" class="px-4 py-6 text-center text-gray-400 text-sm">Pilih user untuk melihat riwayat.</div>
+          <div v-else-if="loadingUserHistory" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
+          <div v-else-if="!userHistory.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada riwayat pada periode ini.</div>
+          <ul v-else class="divide-y divide-gray-200">
+            <li v-for="row in userHistory" :key="row.id" class="px-4 py-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="text-xs text-gray-700">{{ formatDate(row.time) }}</div>
+                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
+                  <div class="mt-1 text-[11px] text-gray-400">Diproses: {{ row.processor?.name || row.processedBy?.name || '-' }}</div>
+                </div>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
+                  {{ row.type }}
+                </span>
+              </div>
+            </li>
+          </ul>
         </div>
 
         <div
