@@ -8,56 +8,70 @@ const router = createRouter({
   routes
 })
 
+// Route fallback yang DIJAMIN bisa diakses semua user login (tidak punya
+// gate role). Dipakai sebagai tujuan redirect bila user mencoba akses
+// route yang ia tidak punya izin role-nya — JANGAN pakai /dashboard sebagai
+// fallback kalau dashboard juga punya gate role: bisa infinite loop.
+const SAFE_FALLBACK = '/dashboard'
+
 /**
- * Guard untuk memeriksa auth + refresh data /user/me setiap navigasi.
+ * Guard auth + role.
  *
- * Tujuan "refresh /user/me" ini adalah:
- *   - memastikan access token masih valid (antisipasi token dicuri/dicabut)
- *   - sinkronisasi data user + role terbaru ke store
+ * Memakai sintaks return-value (vue-router 4) — sintaks `next(...)` lama
+ * sudah deprecated dan menghasilkan warning di console.
  *
- * Kalau call /user/me mengembalikan 401 dan interceptor (api.js) gagal
- * melakukan refresh, interceptor akan meng-clear auth & redirect ke /login.
- * Kita tetap tangkap error di sini supaya navigasi tidak ter-block.
+ * Refresh /user/me hanya dilakukan saat navigasi ke route yang BERBEDA
+ * dengan from. Tanpa pengecekan ini, setiap redirect internal (mis. role
+ * gate gagal) akan men-trigger fetch /user/me lagi, dan kalau redirect
+ * targetnya juga gagal role-check, terjadi loop tak berhingga +
+ * spam /user/me.
  */
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, from) => {
   const authStore = useAuthStore()
 
-  // Kalau route tidak butuh auth (misal /login), jangan panggil /user/me.
+  // Route publik (mis. /login).
   if (!to.meta.requiresAuth) {
-    // Tapi kalau user sudah login dan buka /login, lempar ke dashboard.
     if (to.path === '/login' && authStore.isAuthenticated) {
-      return next('/dashboard')
+      return '/dashboard'
     }
-    return next()
+    return true
   }
 
   // Butuh auth — harus ada access token.
   if (!authStore.isAuthenticated) {
-    return next('/login')
+    return '/login'
   }
 
-  // Refresh data user setiap pindah halaman.
-  try {
-    const fresh = await authService.me()
-    if (fresh) authStore.setUser(fresh)
-  } catch (err) {
-    // Interceptor di api.js sudah menangani 401 + refresh + redirect.
-    // Di sini kita cukup berhenti kalau auth sudah di-clear.
-    if (!authStore.isAuthenticated) {
-      return next('/login')
+  // Refresh /user/me hanya saat path benar-benar berubah, bukan saat
+  // redirect ke path yang sama (mencegah loop dan request spam).
+  if (to.path !== from.path) {
+    try {
+      const fresh = await authService.me()
+      if (fresh) authStore.setUser(fresh)
+    } catch (err) {
+      // Interceptor di api.js sudah menangani 401 + refresh + redirect.
+      if (!authStore.isAuthenticated) {
+        return '/login'
+      }
+      // Error non-auth (network dll) — biarkan lanjut memakai data cache.
+      console.warn('Gagal refresh /user/me:', err?.message || err)
     }
-    // Error non-auth (network dll) — biarkan lanjut memakai data cache.
-    console.warn('Gagal refresh /user/me:', err?.message || err)
   }
 
   // Cek role setelah data user ter-update.
   if (to.meta.roles && to.meta.roles.length > 0 && authStore.user) {
     if (!authStore.hasAnyRole(to.meta.roles)) {
-      return next('/dashboard')
+      // Hindari redirect-ke-diri-sendiri (yang akan loop).
+      if (to.path === SAFE_FALLBACK) {
+        // User bahkan tidak boleh masuk fallback — paksa logout.
+        authStore.clearAuth()
+        return '/login'
+      }
+      return SAFE_FALLBACK
     }
   }
 
-  next()
+  return true
 })
 
 export default router
