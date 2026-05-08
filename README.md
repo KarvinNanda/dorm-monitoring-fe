@@ -299,18 +299,3 @@ __tests__/
     ├── code-patterns.test.js     # eval / innerHTML / v-html / hardcoded creds
     └── token-handling.test.js    # clearAuth completeness, no console.log(token)
 ```
-
-### Status
-
-**218 tests / 29 files / 100% passing.** Jalankan `npm test` untuk verifikasi.
-
-
-### Pola test
-
-- **Service test**: `vi.mock('@/services/api', () => ({ default: { get, post, ... } }))` lalu assert `api.get` dipanggil dengan path + params yang benar.
-- **Component test**: `mount` via @vue/test-utils, mock service modules, helper `loginAs(role)` untuk seed authStore.
-- **Permission gating test**: tiap halaman dengan tombol RW punya describe block "permission gating (non-admin)" yang verifikasi tombol Create/Update/Delete absen di DOM.
-- **Security test**: regex-scan `src/` untuk pola berbahaya; jalankan `npm audit --json` dan fail bila ada vulnerability HIGH/CRITICAL.
-
----
-
