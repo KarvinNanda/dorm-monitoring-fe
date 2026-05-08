@@ -638,7 +638,7 @@ onMounted(async () => {
               <td class="px-3 py-1.5 whitespace-nowrap">
                 <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="txTypeBadge(t.type)">{{ t.type }}</span>
               </td>
-              <td class="px-3 py-1.5 text-sm text-gray-700 font-mono whitespace-nowrap">{{ t.qty }}</td>
+              <td class="px-3 py-1.5 text-sm text-gray-700 font-mono whitespace-nowrap">{{ t.changeQty }}</td>
               <td class="px-3 py-1.5 text-sm text-gray-500 max-w-xs truncate" :title="t.note || ''">{{ t.note || '-' }}</td>
             </tr>
           </tbody>

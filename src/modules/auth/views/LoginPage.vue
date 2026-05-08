@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import { userDeviceService } from '@/services/userDeviceService'
+import { getPlayerId } from '@/utils/oneSignal'
 import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
@@ -31,7 +33,22 @@ async function handleLogin() {
     const userData = await authService.me()
     authStore.setUser(userData)
 
-    // 3) Redirect ke dashboard
+    // 3) Register OneSignal push token ke backend — HARUS selesai sebelum redirect
+    try {
+      const playerId = await getPlayerId()
+      console.log('[OneSignal] Player ID:', playerId)
+      if (playerId) {
+        await userDeviceService.register(playerId)
+        console.log('[OneSignal] Register berhasil')
+      } else {
+        console.warn('[OneSignal] Player ID null — token tidak terdaftar ke backend')
+      }
+    } catch (pushErr) {
+      // Gagal register push token tidak boleh menghalangi login
+      console.warn('[OneSignal] Register error:', pushErr)
+    }
+
+    // 4) Redirect ke dashboard (SETELAH register selesai)
     router.push('/dashboard')
   } catch (err) {
     // Handle error response
@@ -87,8 +104,6 @@ async function handleLogin() {
           v-model="password"
           type="password"
           required
-          minlength="8"
-          placeholder="Minimal 8 karakter"
           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
         />
       </div>

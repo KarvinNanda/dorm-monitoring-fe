@@ -87,11 +87,18 @@ describe('checkLogService', () => {
       })
     })
 
-    it('getUserHistory → GET /check-log/history/:userId dengan filter', async () => {
+    it('getUserHistory → GET /check-log/history/:userId dengan filter (date di-convert ke UTC ISO)', async () => {
       api.get.mockResolvedValueOnce({ data: { data: [], meta: null } })
-      await checkLogService.getUserHistory('u-7', { from: '2025-04-01' })
+      await checkLogService.getUserHistory('u-7', { from: '2025-04-01', to: '2025-04-30' })
       expect(api.get).toHaveBeenCalledWith('/check-log/history/u-7', {
-        params: { page: 1, limit: 10, from: '2025-04-01' }
+        params: {
+          page: 1,
+          limit: 10,
+          // convertToUtc(from)        → start-of-day UTC
+          from: '2025-04-01T00:00:00Z',
+          // convertToUtc(to, true)    → end-of-day UTC (23:59:59)
+          to: '2025-04-30T23:59:59Z'
+        }
       })
     })
 

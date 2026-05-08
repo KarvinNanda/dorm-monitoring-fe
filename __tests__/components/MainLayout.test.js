@@ -15,10 +15,21 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/authService', () => ({
   authService: { logout: vi.fn() }
 }))
+vi.mock('@/services/userDeviceService', () => ({
+  userDeviceService: {
+    register: vi.fn(),
+    unregister: vi.fn()
+  }
+}))
+vi.mock('@/utils/oneSignal', () => ({
+  getCurrentPlayerId: vi.fn()
+}))
 vi.mock('@/assets/logo-3.png', () => ({ default: 'logo.png' }))
 
 import MainLayout from '@/layouts/MainLayout.vue'
 import { authService } from '@/services/authService'
+import { userDeviceService } from '@/services/userDeviceService'
+import { getCurrentPlayerId } from '@/utils/oneSignal'
 import { useAuthStore } from '@/stores/authStore'
 
 const mountOpts = {
@@ -40,6 +51,8 @@ describe('MainLayout — menu visibility per role', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     pushMock.mockReset()
+    userDeviceService.unregister.mockResolvedValue({})
+    getCurrentPlayerId.mockReturnValue('player-id-abc-123')
   })
 
   it('admin melihat menu Users', () => {
@@ -82,20 +95,45 @@ describe('MainLayout — menu visibility per role', () => {
     }
   })
 
-  it('logout: panggil authService.logout, clearAuth, redirect /login', async () => {
+  it('logout: unregister push token (Player ID), panggil authService.logout, clearAuth, redirect /login', async () => {
     loginAs('admin')
     authService.logout.mockResolvedValueOnce({})
     const wrapper = mount(MainLayout, mountOpts)
     const logoutBtn = wrapper.findAll('button').find((b) => b.text().includes('Keluar'))
     await logoutBtn.trigger('click')
     await flushPromises()
+    expect(userDeviceService.unregister).toHaveBeenCalledWith('player-id-abc-123')
     expect(authService.logout).toHaveBeenCalled()
     const store = useAuthStore()
     expect(store.accessToken).toBeNull()
     expect(pushMock).toHaveBeenCalledWith('/login')
   })
 
-  // Catatan: kasus "logout API gagal" dilewati karena handleLogout di MainLayout
-  // tidak meng-catch error eksplisit (hanya try/finally). Finally block sudah
-  // ter-cover di test sukses di atas (clearAuth + redirect dieksekusi).
+  it('OneSignal belum init (no Player ID) → skip unregister, logout tetap jalan', async () => {
+    loginAs('admin')
+    getCurrentPlayerId.mockReturnValue(null)
+    authService.logout.mockResolvedValueOnce({})
+    const wrapper = mount(MainLayout, mountOpts)
+    const logoutBtn = wrapper.findAll('button').find((b) => b.text().includes('Keluar'))
+    await logoutBtn.trigger('click')
+    await flushPromises()
+    expect(userDeviceService.unregister).not.toHaveBeenCalled()
+    expect(authService.logout).toHaveBeenCalled()
+    expect(pushMock).toHaveBeenCalledWith('/login')
+  })
+
+  it('unregister push token gagal → logout tetap berjalan (fire-and-forget)', async () => {
+    loginAs('admin')
+    userDeviceService.unregister.mockRejectedValueOnce(new Error('Network error'))
+    authService.logout.mockResolvedValueOnce({})
+    const wrapper = mount(MainLayout, mountOpts)
+    const logoutBtn = wrapper.findAll('button').find((b) => b.text().includes('Keluar'))
+    await logoutBtn.trigger('click')
+    await flushPromises()
+    // Logout tetap berjalan meskipun unregister gagal
+    expect(authService.logout).toHaveBeenCalled()
+    const store = useAuthStore()
+    expect(store.accessToken).toBeNull()
+    expect(pushMock).toHaveBeenCalledWith('/login')
+  })
 })

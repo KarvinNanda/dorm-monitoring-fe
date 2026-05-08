@@ -1,3 +1,4 @@
+import { convertToUtc } from '../utils/dateFormat'
 import api from './api'
 
 /**
@@ -78,8 +79,8 @@ export const checkLogService = {
    */
   async getUserHistory(userId, { page = 1, limit = 10, from, to } = {}) {
     const params = { page, limit }
-    if (from) params.from = from
-    if (to) params.to = to
+    if (from) params.from = convertToUtc(from)
+    if (to) params.to = convertToUtc(to,true)
     const response = await api.get(`/check-log/history/${userId}`, { params })
     return unwrapList(response)
   },
