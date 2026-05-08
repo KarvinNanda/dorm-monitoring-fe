@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
+import { userDeviceService } from '@/services/userDeviceService'
+import { getCurrentPlayerId } from '@/utils/oneSignal'
 import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
@@ -34,6 +36,14 @@ async function handleLogout() {
   if (loggingOut.value) return
   loggingOut.value = true
   try {
+    // Unregister OneSignal push token sebelum logout (fire-and-forget)
+    try {
+      const playerId = getCurrentPlayerId()
+      console.log('[OneSignal] Unregister Player ID:', playerId)
+      if (playerId) await userDeviceService.unregister(playerId)
+    } catch {
+      // Gagal unregister tidak boleh menghalangi logout
+    }
     await authService.logout()
   } finally {
     authStore.clearAuth()

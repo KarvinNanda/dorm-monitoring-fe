@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 
-const BASE_URL = 'http://192.168.75.128:3000/api/v1'
+const BASE_URL = '/api/v1'
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -12,10 +12,20 @@ const api = axios.create({
 
 // ============ REQUEST INTERCEPTOR ============
 // Selipkan access token ke setiap request
+// api.interceptors.request.use((config) => {
+//   const authStore = useAuthStore()
+//   if (authStore.accessToken) {
+//     config.headers.Authorization = `Bearer ${authStore.accessToken}`
+//   }
+//   return config
+// })
+
 api.interceptors.request.use((config) => {
   const authStore = useAuthStore()
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
+    config.headers['ngrok-skip-browser-warning'] = true
+    config.withCredentials = true
   }
   return config
 })

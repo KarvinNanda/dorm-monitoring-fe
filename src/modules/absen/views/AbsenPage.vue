@@ -246,7 +246,8 @@ function openManual() {
   manualForm.value = {
     userId: '',
     type: 'IN',
-    time: nowJakartaDatetimeInput(),
+    // time: nowJakartaDatetimeInput(),
+    eventTime :nowJakartaDatetimeInput(),
     note: ''
   }
   manualError.value = ''
@@ -259,7 +260,7 @@ async function submitManual() {
     manualError.value = 'Pilih user'
     return
   }
-  if (!manualForm.value.time) {
+  if (!manualForm.value.eventTime) {
     manualError.value = 'Waktu wajib diisi'
     return
   }
@@ -269,7 +270,8 @@ async function submitManual() {
       userId: manualForm.value.userId,
       type: manualForm.value.type,
       // Input datetime-local di-interpretasikan sebagai WIB, dikonversi ke UTC ISO.
-      time: jakartaInputToISO(manualForm.value.time),
+      // time: jakartaInputToISO(manualForm.value.time),
+      eventTime: jakartaInputToISO(manualForm.value.eventTime),
       note: manualForm.value.note || undefined
     })
 
@@ -736,7 +738,7 @@ onMounted(async () => {
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">Waktu</label>
                 <input
-                  v-model="manualForm.time"
+                  v-model="manualForm.eventTime"
                   type="datetime-local"
                   required
                   class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"

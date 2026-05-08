@@ -3,13 +3,17 @@
 Frontend aplikasi internal untuk monitoring dorm, dibangun dengan **Vue 3**, **Vite**, **Tailwind CSS**, **Vue Router**, dan **Pinia**.
 
 Menu yang sudah aktif:
-- 🌿 **Dashboard** — ringkasan info akun & statistik
+- 🌿 **Dashboard** — ringkasan adaptif per role dari endpoint `/dashboard` (admin: currentClock IN/OUT + guestVisit + reservasi; resident: status absen sendiri; receptionist: guestVisit + reservasi)
 - 🍃 **Absensi** — tap in / tap out harian + manual entry & status terkini
 - 🌱 **Tamu** — manajemen data tamu & catatan kunjungan
 - 👥 **Users** — manajemen akun, role, aktivasi
 - 📦 **Inventaris** — item, kategori, transaksi stok
 - 🏛️ **Fasilitas** — daftar fasilitas + reservasi 
 - 👤 **Profil** — kelola akun sendiri & ganti password
+
+Service backend-only (tanpa halaman dedicated):
+- 🔔 **Notification** — `notificationService` (`/notification` list, unread-count, read-all)
+- 📱 **User Device** — `userDeviceService` (`/user-device` register / unregister push token)
 
 ---
 
@@ -125,7 +129,10 @@ my-app/
 │   │   ├── itemCategoryService.js
 │   │   ├── itemTransactionService.js  # /item-transaction (admin only)
 │   │   ├── facilityService.js
-│   │   └── facilityReservationService.js
+│   │   ├── facilityReservationService.js
+│   │   ├── dashboardService.js        # GET /dashboard (response adaptif per role)
+│   │   ├── notificationService.js     # /notification list, unread-count, read-all
+│   │   └── userDeviceService.js       # /user-device register/unregister push token
 │   ├── stores/
 │   │   └── authStore.js         # Pinia store: user, tokens, hasRole / hasAnyRole
 │   ├── utils/
@@ -173,7 +180,9 @@ my-app/
 |-------|--------|-------------|
 | Login / Logout | ✅ Selesai | API real |
 | Refresh Token (auto-retry 401) | ✅ Selesai | API real |
-| Dashboard | ✅ Selesai | User dari API, counter dari dummy |
+| Dashboard (adaptif per role) | ✅ Selesai | API real (`/dashboard`) |
+| Notification (list / unread-count / read-all) | ✅ Service ready | API real (`/notification`) — belum ada page UI |
+| User Device (push token register/unregister) | ✅ Service ready | API real (`/user-device`) — belum dipasang ke FCM/web push |
 | Absensi (tap in/out, manual entry, riwayat) | ✅ Selesai | API real (`/check-log`) |
 | Manajemen Tamu (guest + visit + close) | ✅ Selesai | API real (`/guest`, `/guest-visit`) |
 | Manajemen User (CRUD, role assign, activate, reset password) | ✅ Selesai | API real (`/user`, `/role`) |
@@ -206,6 +215,9 @@ Tiga lapis gating, dari paling longgar ke paling ketat:
 | Item Transaction      | **Admin only**                | **Admin only** |
 | Facility              | Semua                         | **Admin only** |
 | Facility Reservation  | Semua                         | **Admin only** |
+| Dashboard             | Semua (response adaptif)      | —              |
+| Notification          | Semua (own)                   | Semua (read-all only) |
+| User Device           | Semua (own)                   | Semua (own)    |
 
 ### Menu visibility per role (sidebar / bottom-nav)
 
@@ -268,7 +280,10 @@ __tests__/
 │   ├── itemCategoryService.test.js
 │   ├── itemTransactionService.test.js
 │   ├── facilityService.test.js
-│   └── facilityReservationService.test.js
+│   ├── facilityReservationService.test.js
+│   ├── dashboardService.test.js
+│   ├── notificationService.test.js
+│   └── userDeviceService.test.js
 ├── components/                   # smoke + interaction tests halaman
 │   ├── LoginPage.test.js
 │   ├── DashboardPage.test.js
@@ -284,17 +299,3 @@ __tests__/
     ├── code-patterns.test.js     # eval / innerHTML / v-html / hardcoded creds
     └── token-handling.test.js    # clearAuth completeness, no console.log(token)
 ```
-
-### Status
-
-**199 tests / 26 files / 100% passing.** Jalankan `npm test` untuk verifikasi.
-
-
-### Pola test
-
-- **Service test**: `vi.mock('@/services/api', () => ({ default: { get, post, ... } }))` lalu assert `api.get` dipanggil dengan path + params yang benar.
-- **Component test**: `mount` via @vue/test-utils, mock service modules, helper `loginAs(role)` untuk seed authStore.
-- **Permission gating test**: tiap halaman dengan tombol RW punya describe block "permission gating (non-admin)" yang verifikasi tombol Create/Update/Delete absen di DOM.
-- **Security test**: regex-scan `src/` untuk pola berbahaya; jalankan `npm audit --json` dan fail bila ada vulnerability HIGH/CRITICAL.
-
----

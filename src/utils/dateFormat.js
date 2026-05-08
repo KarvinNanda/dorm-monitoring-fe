@@ -7,6 +7,8 @@
  * Asia/Jakarta.
  */
 
+import { split } from "postcss/lib/list"
+
 const JAKARTA_TZ = 'Asia/Jakarta'
 
 /**
@@ -121,4 +123,17 @@ export function todayJakartaDate(iso) {
   const map = {}
   parts.forEach((p) => (map[p.type] = p.value))
   return `${map.year}-${map.month}-${map.day}`
+}
+
+export function convertToUtc(dateStr, isEndDate = false) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  
+  // Kita pakai Date.UTC tapi jamnya dipaksa 0 atau 23
+  // Tanpa dikurangi 7, jadi angkanya "saklek" sesuai input
+  
+  const date = !isEndDate ? 
+    new Date(Date.UTC(year, month - 1, day, 0, 0, 0)) :
+    new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+
+  return date.toISOString().split('.')[0] + 'Z';
 }
