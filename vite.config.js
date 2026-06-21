@@ -4,11 +4,11 @@ import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   server: {
-    allowedHosts: ['barber-bath-showman.ngrok-free.dev'],
+    allowedHosts: ['rumahalambahagia.com','www.rumahalambahagia.com'],
 
     proxy: {
       '/api': {
-        target: 'https://6a75-125-161-49-230.ngrok-free.app',
+        target: 'https://192.168.75.128:3000',
         changeOrigin: true,
         secure: false,
       },
