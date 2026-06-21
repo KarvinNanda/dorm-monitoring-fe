@@ -82,12 +82,16 @@ describe('security: token handling', () => {
     expect(hits, `Authorization header hanya boleh di api.js, ditemukan: ${hits.join(', ')}`).toEqual([])
   })
 
-  it('api.js baseURL pakai protokol http/https (bukan ftp / file / javascript)', () => {
+  it('api.js BASE_URL tidak mengandung protokol berbahaya', () => {
+    // BASE_URL boleh berupa relative path (/api/v1) untuk Vite proxy,
+    // atau absolute https:// untuk production.
+    // Yang dilarang: javascript:, data:, file:, ftp:
     const apiSource = readFileSync(join(srcDir, 'services', 'api.js'), 'utf-8')
     const match = apiSource.match(/BASE_URL\s*=\s*['"`]([^'"`]+)['"`]/)
     expect(match, 'BASE_URL harus di-declare di api.js').not.toBeNull()
     const url = match[1]
-    expect(url).toMatch(/^https?:\/\//)
+    // Boleh relative (/api/...) atau https?:// — yang penting bukan protokol berbahaya
     expect(url).not.toMatch(/^(javascript|data|file|ftp):/i)
+    expect(url).not.toMatch(/^http:\/\/localhost/i)
   })
 })
