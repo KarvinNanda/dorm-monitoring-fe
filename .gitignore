@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 .claude
+.env
 
 # Unit test layer — di-ignore sesuai permintaan (tidak di-track git supaya
 # file test tidak ter-commit / ter-modifikasi tidak sengaja).

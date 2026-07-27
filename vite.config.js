@@ -4,13 +4,13 @@ import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   server: {
-    allowedHosts: ['rumahalambahagia.com','www.rumahalambahagia.com'],
+    allowedHosts: ['rumahalambahagia.com', 'www.rumahalambahagia.com'],
 
     proxy: {
       '/api': {
-        target: 'https://192.168.75.128:3000',
+        target: 'https://api.rumahalambahagia.com',
         changeOrigin: true,
-        secure: false,
+        secure: true,
       },
     },
   },

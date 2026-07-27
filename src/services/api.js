@@ -1,7 +1,15 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 
-const BASE_URL = '/api/v1'
+// Dev lokal: BASE_URL relative ('/api/v1') → request tetap same-origin,
+// diteruskan Vite dev server proxy (lihat vite.config.js) ke backend.
+// Ini menghindari CORS sepenuhnya karena hop cross-origin terjadi di Node
+// (Vite), bukan di browser.
+// Production/tanpa proxy: set VITE_API_BASE_URL ke URL absolute backend
+// (mis. https://api.rumahalambahagia.com) — tapi backend WAJIB mengizinkan
+// CORS untuk origin frontend saat itu.
+const RAW_BASE = (import.meta.env.VITE_API_BASE_URL || '').trim()
+const BASE_URL = RAW_BASE ? `${RAW_BASE.replace(/\/$/, '')}/api/v1` : '/api/v1'
 
 const api = axios.create({
   baseURL: BASE_URL,
