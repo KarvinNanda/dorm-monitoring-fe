@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
+import NotificationBell from '@/components/NotificationBell.vue'
 import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
@@ -140,6 +141,7 @@ async function handleLogout() {
         <h1 class="text-lg font-bold text-primary">Sistem Internal</h1>
       </div>
       <div class="flex items-center gap-3">
+        <NotificationBell />
         <router-link to="/profile" class="text-sm text-primary font-medium">👤 Profil</router-link>
         <button @click="handleLogout" class="text-sm text-red-600">Keluar</button>
       </div>
@@ -159,14 +161,22 @@ async function handleLogout() {
       </router-link>
     </nav>
 
-    <!-- ============ KONTEN UTAMA ============ -->
-    <main class="flex-1 p-6 md:p-8 md:pt-8 pt-20 pb-24 md:pb-8 overflow-x-hidden">
-      <router-view v-slot="{ Component }">
-        <transition name="page" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
+    <!-- ============ KOLOM KANAN: TOP NAVBAR (DESKTOP) + KONTEN ============ -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Top navbar tipis, desktop only — cuma lonceng notif, right-aligned.
+           Profil/Keluar/identitas user tetap di sidebar bawah-kiri, tidak diubah. -->
+      <header class="hidden md:flex items-center justify-end px-6 py-3 bg-white border-b border-gray-200">
+        <NotificationBell />
+      </header>
+
+      <main class="flex-1 p-6 md:p-8 md:pt-8 pt-20 pb-24 md:pb-8 overflow-x-hidden">
+        <router-view v-slot="{ Component }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
   </div>
 </template>
 

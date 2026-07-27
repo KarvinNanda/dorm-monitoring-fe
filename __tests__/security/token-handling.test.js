@@ -83,15 +83,12 @@ describe('security: token handling', () => {
   })
 
   it('api.js BASE_URL tidak mengandung protokol berbahaya', () => {
-    // BASE_URL boleh berupa relative path (/api/v1) untuk Vite proxy,
-    // atau absolute https:// untuk production.
-    // Yang dilarang: javascript:, data:, file:, ftp:
+    // BASE_URL boleh berupa relative path (/api/v1, untuk Vite proxy)
+    // atau absolute https:// (production, tanpa proxy) — dibangun dinamis
+    // dari VITE_API_BASE_URL. Yang dilarang: javascript:, data:, file:, ftp:.
     const apiSource = readFileSync(join(srcDir, 'services', 'api.js'), 'utf-8')
-    const match = apiSource.match(/BASE_URL\s*=\s*['"`]([^'"`]+)['"`]/)
-    expect(match, 'BASE_URL harus di-declare di api.js').not.toBeNull()
-    const url = match[1]
-    // Boleh relative (/api/...) atau https?:// — yang penting bukan protokol berbahaya
-    expect(url).not.toMatch(/^(javascript|data|file|ftp):/i)
-    expect(url).not.toMatch(/^http:\/\/localhost/i)
+    expect(apiSource, 'BASE_URL harus di-declare di api.js').toMatch(/const\s+BASE_URL\s*=/)
+    expect(apiSource).not.toMatch(/(javascript|data|file|ftp):\/\//i)
+    expect(apiSource).not.toMatch(/http:\/\/localhost/i)
   })
 })

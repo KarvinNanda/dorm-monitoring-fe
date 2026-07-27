@@ -24,12 +24,20 @@ vi.mock('@/services/userDeviceService', () => ({
 vi.mock('@/utils/oneSignal', () => ({
   getCurrentPlayerId: vi.fn()
 }))
+vi.mock('@/services/notificationService', () => ({
+  notificationService: {
+    list: vi.fn(),
+    unreadCount: vi.fn(),
+    readAll: vi.fn()
+  }
+}))
 vi.mock('@/assets/logo-3.png', () => ({ default: 'logo.png' }))
 
 import MainLayout from '@/layouts/MainLayout.vue'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
+import { notificationService } from '@/services/notificationService'
 import { useAuthStore } from '@/stores/authStore'
 
 const mountOpts = {
@@ -53,6 +61,9 @@ describe('MainLayout — menu visibility per role', () => {
     pushMock.mockReset()
     userDeviceService.unregister.mockResolvedValue({})
     getCurrentPlayerId.mockReturnValue('player-id-abc-123')
+    notificationService.unreadCount.mockResolvedValue({ count: 0 })
+    notificationService.list.mockResolvedValue({ data: [], meta: null })
+    notificationService.readAll.mockResolvedValue({ counts: 0 })
   })
 
   it('admin melihat menu Users', () => {
