@@ -12,13 +12,9 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const user = computed(() => authStore.user)
-// Tampilkan semua role user (admin, resident, receptionist, dst.) sebagai chip,
-// bukan cuma primaryRole.
 const userRoles = computed(() => authStore.roles)
 
 const menuItems = computed(() => {
-  // Semua menu bisa diakses oleh user login
-  // (filter per-role bisa diaktifkan lagi setelah role API diketahui)
   const items = [
     { label: 'Dashboard', path: '/dashboard', icon: '🌿' },
     { label: 'Absensi', path: '/absen', icon: '🍃',roles: ['admin', 'resident'] },
@@ -27,7 +23,6 @@ const menuItems = computed(() => {
     { label: 'Fasilitas', path: '/facility', icon: '🏛️' ,roles: ['admin']},
     { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] }
   ]
-  // Filter menu yang butuh role spesifik
   return items.filter((i) => !i.roles || authStore.hasAnyRole(i.roles))
 })
 
@@ -37,14 +32,10 @@ async function handleLogout() {
   if (loggingOut.value) return
   loggingOut.value = true
   try {
-    // Unregister OneSignal push token sebelum logout (fire-and-forget)
     try {
       const playerId = getCurrentPlayerId()
-      console.log('[OneSignal] Unregister Player ID:', playerId)
       if (playerId) await userDeviceService.unregister(playerId)
-    } catch {
-      // Gagal unregister tidak boleh menghalangi logout
-    }
+    } catch {}
     await authService.logout()
   } finally {
     authStore.clearAuth()
@@ -55,304 +46,196 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-gray-50">
-    <!-- ============ SIDEBAR (DESKTOP) ============ -->
-    <aside class="w-72 bg-white border-r border-gray-200 flex-col hidden md:flex">
-      <!-- Header dengan tema pohon -->
-      <div class="p-6 border-b border-gray-200">
+  <div class="flex h-screen bg-[#f4f7f6] overflow-hidden">
+    <!-- SIDEBAR (DESKTOP) -->
+    <aside class="w-72 glass-panel hidden md:flex flex-col m-4 rounded-3xl overflow-hidden z-20 border-white/60">
+      <!-- Header / Logo -->
+      <div class="p-6">
         <div class="flex items-center gap-3">
-          <img
-            :src="logoUrl"
-            alt="Logo Sistem Internal"
-            class="w-10 h-10 object-contain animate-sway"
-          />
+          <div class="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
+            <img :src="logoUrl" alt="Logo" class="w-8 h-8 object-contain" />
+          </div>
           <div>
-            <h1 class="text-lg font-bold text-primary leading-tight">Sistem Internal</h1>
-            <p class="text-xs text-gray-400">Tumbuh bersama kami</p>
+            <h1 class="text-lg font-bold text-gray-800 leading-tight">Sistem Internal</h1>
           </div>
         </div>
       </div>
 
-      <!-- Tree nav -->
-      <nav class="flex-1 p-4">
-        <!-- Root label -->
-        <div class="flex items-center gap-2 mb-2 text-sm font-semibold text-secondary">
-          <span>🌳</span>
-          <span>Menu Utama</span>
-        </div>
-
-        <!-- Tree branches container -->
-        <div class="tree">
+      <!-- Navigation -->
+      <nav class="flex-1 px-4 py-2 overflow-y-auto">
+        <div class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 px-3">Menu Utama</div>
+        <div class="space-y-1">
           <router-link
             v-for="(item, idx) in menuItems"
             :key="item.path"
             :to="item.path"
-            :style="{ animationDelay: `${idx * 100}ms` }"
-            class="tree-branch group"
-            :class="{ 'is-last': idx === menuItems.length - 1 }"
-            active-class="tree-branch-active"
+            class="group flex items-center gap-3 px-3 py-2.5 rounded-2xl text-gray-500 transition-all duration-300 hover:bg-white hover:shadow-soft hover:text-primary hover:translate-x-1 relative overflow-hidden"
+            active-class="active-nav-item"
+            :style="{ animationDelay: `${idx * 50}ms` }"
           >
-            <span class="branch-icon">{{ item.icon }}</span>
-            <span class="branch-label">{{ item.label }}</span>
+            <!-- Background highlight (active) -->
+            <div class="absolute inset-0 bg-gradient-to-r from-green-50 to-transparent opacity-0 group-[.active-nav-item]:opacity-100 transition-opacity duration-300"></div>
+            
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50/50 group-hover:bg-green-50 group-[.active-nav-item]:bg-green-100 transition-colors z-10 shadow-sm border border-transparent group-[.active-nav-item]:border-green-200/50">
+              <span class="text-lg group-hover:scale-110 transition-transform duration-300">{{ item.icon }}</span>
+            </div>
+            <span class="font-medium z-10">{{ item.label }}</span>
+            
+            <!-- Active Indicator -->
+            <div class="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary opacity-0 group-[.active-nav-item]:opacity-100 transition-opacity z-10"></div>
           </router-link>
         </div>
       </nav>
 
-      <!-- User footer -->
-      <div class="p-4 border-t border-gray-200">
-        <div class="px-4 py-2 text-sm text-gray-500 mb-2">
-          <div class="font-medium text-gray-700">{{ user?.name || 'Pengguna' }}</div>
-          <div class="mt-1 flex flex-wrap gap-1">
-            <span
-              v-for="r in userRoles"
-              :key="r"
-              class="text-xs bg-green-100 text-primary px-2 py-0.5 rounded-full capitalize"
-            >{{ r }}</span>
-            <span
-              v-if="!userRoles.length"
-              class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"
-            >tanpa role</span>
+      <!-- User Profile / Footer -->
+      <div class="p-4 mt-auto">
+        <div class="bg-white/60 backdrop-blur-md rounded-2xl p-3 shadow-soft mb-3 border border-white">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-100 to-green-200 text-primary flex items-center justify-center font-bold text-lg shadow-inner">
+              {{ user?.name?.charAt(0).toUpperCase() || 'U' }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-sm text-gray-800 truncate">{{ user?.name || 'Pengguna' }}</div>
+              <div class="flex flex-wrap gap-1 mt-1">
+                <span
+                  v-for="r in userRoles"
+                  :key="r"
+                  class="text-[10px] bg-white text-primary px-2 py-0.5 rounded-md capitalize font-medium shadow-sm border border-green-100"
+                >{{ r }}</span>
+                <span
+                  v-if="!userRoles.length"
+                  class="text-[10px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md shadow-sm border border-gray-100"
+                >tanpa role</span>
+              </div>
+            </div>
           </div>
+          
+          <router-link
+            to="/profile"
+            class="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary hover:bg-white rounded-xl transition-all duration-200 shadow-sm border border-transparent hover:border-gray-100"
+          >
+            <span class="text-base">👤</span> Profil Saya
+          </router-link>
         </div>
-        <router-link
-          to="/profile"
-          class="w-full block px-4 py-2 text-sm text-primary hover:bg-green-50 rounded-lg transition-all duration-200 text-left hover:translate-x-1 mb-1"
-          active-class="bg-green-50 font-semibold"
-        >
-          👤 Profil Saya
-        </router-link>
+        
         <button
           @click="handleLogout"
-          class="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 text-left hover:translate-x-1"
+          class="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-red-600 bg-white hover:bg-red-50 rounded-xl transition-all duration-200 shadow-sm border border-gray-100 hover:border-red-100 hover:shadow-soft"
         >
-          → Keluar
+          <span>Keluar</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
         </button>
       </div>
     </aside>
 
-    <!-- ============ HEADER MOBILE ============ -->
-    <div class="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50 p-4 flex items-center justify-between">
+    <!-- MOBILE HEADER -->
+    <div class="md:hidden fixed top-0 left-0 right-0 glass-header z-50 p-4 flex items-center justify-between shadow-sm">
       <div class="flex items-center gap-2">
-        <img
-          :src="logoUrl"
-          alt="Logo Sistem Internal"
-          class="w-8 h-8 object-contain animate-sway"
-        />
-        <h1 class="text-lg font-bold text-primary">Sistem Internal</h1>
+        <img :src="logoUrl" alt="Logo" class="w-8 h-8 object-contain" />
+        <h1 class="text-base font-bold text-gray-800">Sistem Internal</h1>
       </div>
       <div class="flex items-center gap-3">
         <NotificationBell />
-        <router-link to="/profile" class="text-sm text-primary font-medium">👤 Profil</router-link>
-        <button @click="handleLogout" class="text-sm text-red-600">Keluar</button>
+        <button @click="handleLogout" class="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        </button>
       </div>
     </div>
 
-    <!-- ============ NAV BAWAH MOBILE ============ -->
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex">
+    <!-- MOBILE BOTTOM NAV -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 z-50 flex px-2 py-2 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
       <router-link
         v-for="item in menuItems"
         :key="item.path"
         :to="item.path"
-        class="flex-1 py-3 text-center text-xs text-gray-500 hover:text-primary transition-all duration-200"
-        active-class="text-primary font-medium mobile-active"
+        class="flex-1 py-1.5 flex flex-col items-center justify-center text-gray-400 transition-colors relative group"
+        active-class="text-primary mobile-active-item"
       >
-        <div class="text-lg mb-1">{{ item.icon }}</div>
-        {{ item.label }}
+        <!-- Active Pill Background -->
+        <div class="absolute inset-0 bg-green-50/80 rounded-2xl opacity-0 group-[.mobile-active-item]:opacity-100 transition-opacity scale-90 group-[.mobile-active-item]:scale-100 duration-300 mx-1"></div>
+        
+        <div class="text-xl mb-0.5 z-10 group-[.mobile-active-item]:-translate-y-1 transition-transform duration-300 drop-shadow-sm">{{ item.icon }}</div>
+        <span class="text-[10px] font-semibold z-10">{{ item.label }}</span>
       </router-link>
     </nav>
 
-    <!-- ============ KOLOM KANAN: TOP NAVBAR (DESKTOP) + KONTEN ============ -->
-    <div class="flex-1 flex flex-col min-w-0">
-      <!-- Top navbar tipis, desktop only — cuma lonceng notif, right-aligned.
-           Profil/Keluar/identitas user tetap di sidebar bawah-kiri, tidak diubah. -->
-      <header class="hidden md:flex items-center justify-end px-6 py-3 bg-white border-b border-gray-200">
-        <NotificationBell />
+    <!-- KONTEN UTAMA -->
+    <div class="flex-1 flex flex-col min-w-0 md:pt-2 md:pb-4 md:pr-4 relative">
+      <!-- Top navbar (Desktop) -->
+      <header class="hidden md:flex items-center justify-end px-2 pb-2 pt-0 bg-transparent z-10 w-full relative">
+        <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-4">
+          <NotificationBell />
+        </div>
       </header>
 
-      <main class="flex-1 p-6 md:p-8 md:pt-8 pt-20 pb-24 md:pb-8 overflow-x-hidden">
-        <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+      <main class="flex-1 bg-white md:rounded-3xl shadow-soft border border-white overflow-hidden relative flex flex-col pt-20 md:pt-0 pb-24 md:pb-0 z-10 mx-0 md:mx-0">
+        <!-- Decorative subtle background element -->
+        <div class="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-green-50 to-transparent rounded-full blur-3xl opacity-60 -z-10 -translate-y-1/2 translate-x-1/4"></div>
+        <div class="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-gray-50 to-transparent rounded-full blur-2xl opacity-60 -z-10 translate-y-1/3 -translate-x-1/4"></div>
+        
+        <div class="flex-1 overflow-auto p-4 md:p-5 scroll-smooth">
+          <router-view v-slot="{ Component }">
+            <transition name="fade-slide" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </div>
       </main>
     </div>
   </div>
 </template>
 
-<style scoped>
-/* ============ TREE STRUCTURE ============ */
-.tree {
-  position: relative;
-  padding-left: 12px;
+<style>
+/* Global page transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Trunk (garis vertikal utama) */
-.tree::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 6px;
-  bottom: 24px;
-  width: 2px;
-  background: linear-gradient(to bottom, #6D4C41, #a1887f);
-  border-radius: 2px;
-}
-
-/* Branch (setiap menu item) */
-.tree-branch {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px 10px 24px;
-  margin-bottom: 4px;
-  border-radius: 10px;
-  color: #4b5563;
-  font-size: 0.9rem;
-  text-decoration: none;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+.fade-slide-enter-from {
   opacity: 0;
-  transform: translateX(-10px);
-  animation: branchGrow 0.5s ease forwards;
+  transform: translateY(15px) scale(0.99);
 }
 
-/* Horizontal connector dari trunk ke branch */
-.tree-branch::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  width: 20px;
-  height: 2px;
-  background: #a1887f;
-  border-radius: 2px;
-  transform-origin: left;
-  transition: all 0.3s ease;
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-15px) scale(0.99);
 }
 
-/* Daun kecil (dot) di ujung branch */
-.tree-branch::after {
-  content: '';
-  position: absolute;
-  left: 10px;
-  top: 50%;
+/* Safe area padding for mobile iOS devices */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 12px);
+}
+
+/* Staggered animation for sidebar items */
+.group {
+  animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Custom Scrollbar for inner content */
+::-webkit-scrollbar {
   width: 6px;
   height: 6px;
-  margin-top: -3px;
-  border-radius: 50%;
-  background: #c5e1a5;
-  box-shadow: 0 0 0 2px white;
-  transition: all 0.3s ease;
 }
-
-/* Menutupi sisa trunk di bawah item terakhir */
-.tree-branch.is-last {
-  position: relative;
+::-webkit-scrollbar-track {
+  background: transparent; 
 }
-.tree-branch.is-last::before {
-  background: #a1887f;
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0; 
+  border-radius: 10px;
 }
-
-/* Hover state - branch tumbuh */
-.tree-branch:hover {
-  background: #f1f8e9;
-  color: #2E7D32;
-  transform: translateX(4px);
-}
-
-.tree-branch:hover::before {
-  background: #2E7D32;
-  width: 24px;
-}
-
-.tree-branch:hover::after {
-  background: #2E7D32;
-  transform: scale(1.4);
-}
-
-.tree-branch:hover .branch-icon {
-  transform: rotate(-10deg) scale(1.2);
-}
-
-/* Active state */
-.tree-branch-active {
-  background: #e8f5e9 !important;
-  color: #2E7D32 !important;
-  font-weight: 600;
-}
-
-.tree-branch-active::before {
-  background: #2E7D32 !important;
-  width: 24px !important;
-}
-
-.tree-branch-active::after {
-  background: #2E7D32 !important;
-  transform: scale(1.5) !important;
-  box-shadow: 0 0 0 2px white, 0 0 8px rgba(46, 125, 50, 0.4) !important;
-}
-
-.branch-icon {
-  display: inline-block;
-  font-size: 1.1rem;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.branch-label {
-  flex: 1;
-}
-
-/* Animasi branch muncul saat load */
-@keyframes branchGrow {
-  0% {
-    opacity: 0;
-    transform: translateX(-20px) scale(0.9);
-  }
-  60% {
-    opacity: 1;
-    transform: translateX(2px) scale(1.02);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-/* Animasi pohon bergoyang pelan */
-@keyframes sway {
-  0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(5deg); }
-}
-
-.animate-sway {
-  display: inline-block;
-  animation: sway 3s ease-in-out infinite;
-  transform-origin: bottom center;
-}
-
-/* ============ MOBILE ACTIVE ============ */
-.mobile-active {
-  background: #e8f5e9;
-}
-
-/* ============ PAGE TRANSITIONS ============ */
-</style>
-
-<style>
-/* Global page transition — pakai style tanpa scoped agar class tersambung ke child */
-.page-enter-active,
-.page-leave-active {
-  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(16px) scale(0.98);
-}
-
-.page-leave-to {
-  opacity: 0;
-  transform: translateY(-12px) scale(0.98);
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1; 
 }
 </style>
