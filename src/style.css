@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-glass-white backdrop-blur-md border border-glass-border shadow-glass;
+  }
+  .glass-header {
+    @apply bg-white/80 backdrop-blur-md border-b border-gray-100;
+  }
+}
+
+body {
+  @apply bg-gray-50 text-gray-800 antialiased font-sans;
+}

@@ -13,7 +13,7 @@ const listError = ref('')
 
 // Pagination & query
 const page = ref(1)
-const limit = ref(10)
+const limit = ref(4)
 const meta = ref(null) // { total, page, limit, totalPages } (fleksibel)
 const search = ref('')
 const sortBy = ref('createdAt') // name | createdAt

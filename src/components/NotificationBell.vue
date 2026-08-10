@@ -90,13 +90,13 @@ onBeforeUnmount(() => {
     <button
       type="button"
       @click="toggleDropdown"
-      class="relative p-2 rounded-lg hover:bg-green-50 transition-colors"
+      class="relative p-2 rounded-xl hover:bg-white hover:shadow-sm transition-all duration-300 group"
       aria-label="Notifikasi"
     >
-      <span class="text-xl">🔔</span>
+      <span class="text-xl group-hover:scale-110 transition-transform duration-300 inline-block origin-top">🔔</span>
       <span
         v-if="unreadCount > 0"
-        class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full"
+        class="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full shadow-sm ring-2 ring-white"
       >
         {{ unreadCount > 99 ? '99+' : unreadCount }}
       </span>
@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
         <div
           v-if="isOpen"
           ref="dropdownEl"
-          class="fixed top-16 right-4 sm:top-4 sm:right-6 w-80 max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-200 z-[100] overflow-hidden"
+          class="fixed top-16 right-4 sm:top-5 sm:right-8 w-80 max-w-[90vw] bg-white/95 backdrop-blur-xl rounded-2xl shadow-soft border border-gray-100 z-[100] overflow-hidden"
         >
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h3 class="text-sm font-semibold text-gray-700">Notifikasi Terbaru</h3>
