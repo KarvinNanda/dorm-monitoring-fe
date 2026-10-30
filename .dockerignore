@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+.git
+.github
+.vscode
+.claude
+.antigravitycli
+__tests__
+.env
+.env.*
+*.local
+.DS_Store

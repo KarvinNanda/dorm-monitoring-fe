@@ -1,0 +1,8 @@
+services:
+  web:
+    build: .
+    image: dorm-monitoring-fe:latest
+    container_name: dorm-monitoring-fe
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:80"
