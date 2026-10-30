@@ -221,3 +221,29 @@ describe('usePushNotifications — enable()', () => {
     await expect(push.enable()).resolves.toBeUndefined()
   })
 })
+
+describe('usePushNotifications — log debug di console', () => {
+  const infoLines = () => console.info.mock.calls.map((args) => args.join(' '))
+
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+  })
+
+  it('saat start: cetak status izin dan subscription id', async () => {
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'granted', id: 'sub-1', optedIn: true }))
+    await usePushNotifications().start()
+    expect(infoLines().some((l) => l.includes('[OneSignal]') && l.includes('granted') && l.includes('sub-1'))).toBe(true)
+  })
+
+  it('register ke backend berhasil: cetak subscription id yang terdaftar', async () => {
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'granted', id: 'sub-1', optedIn: true }))
+    await usePushNotifications().start()
+    expect(infoLines().some((l) => l.includes('terdaftar') && l.includes('sub-1'))).toBe(true)
+  })
+
+  it('SDK tidak tersedia: cetak alasannya', async () => {
+    whenOneSignalReady.mockResolvedValue(null)
+    await usePushNotifications().start()
+    expect(infoLines().some((l) => l.includes('[OneSignal]') && l.includes('tidak tersedia'))).toBe(true)
+  })
+})

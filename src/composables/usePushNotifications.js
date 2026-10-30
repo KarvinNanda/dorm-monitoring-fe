@@ -26,6 +26,7 @@ export function usePushNotifications() {
     registeredId = id
     try {
       await userDeviceService.register(id)
+      console.info('[OneSignal] Device terdaftar ke backend. Subscription ID:', id)
     } catch (err) {
       // Biarkan id ini dicoba lagi di event berikutnya.
       registeredId = null
@@ -50,11 +51,17 @@ export function usePushNotifications() {
     if (stopped) return
     sdk = ready
     if (!sdk || !sdk.Notifications.isPushSupported()) {
+      console.info('[OneSignal] Push tidak tersedia:', sdk ? 'browser tidak mendukung' : 'SDK gagal load/init')
       sdk = null
       status.value = 'unsupported'
       return
     }
     const subscription = sdk.User.PushSubscription
+    console.info(
+      '[OneSignal] Izin:', sdk.Notifications.permissionNative,
+      '| optedIn:', subscription.optedIn,
+      '| Subscription ID:', subscription.id || '(belum ada)'
+    )
     subscription.addEventListener('change', onSubscriptionChange)
     // Izin yang diberikan dari luar SDK (user membuka blokir lewat setting
     // situs) membuat SDK melaporkan optedIn tanpa subscription, dan optIn()
