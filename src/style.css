@@ -167,6 +167,26 @@
   }
 }
 
+/* Light <-> dark switch (src/utils/theme.js). View Transitions crossfade the
+   whole page; the default 250ms reads as a flash, so it is slowed down. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 400ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Fallback for browsers without View Transitions: fade colours instead of
+   snapping. Only present for 400ms after a toggle. */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 400ms !important;
+  transition-timing-function: ease-in-out !important;
+  transition-delay: 0s !important;
+}
+
 /* Respect the OS "reduce motion" setting: keep state changes, drop movement. */
 @media (prefers-reduced-motion: reduce) {
   *,
