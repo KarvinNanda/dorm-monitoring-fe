@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { notificationService } from '@/services/notificationService'
 import { formatDate } from '@/utils/dateFormat'
+import { Bell, CheckCheck, Inbox, LoaderCircle } from 'lucide-vue-next'
 
 const isOpen = ref(false)
 const unreadCount = ref(0)
@@ -90,60 +91,64 @@ onBeforeUnmount(() => {
     <button
       type="button"
       @click="toggleDropdown"
-      class="relative p-2 rounded-xl hover:bg-white hover:shadow-sm transition-all duration-300 group"
+      class="relative w-11 h-11 flex items-center justify-center rounded-full text-ink-muted hover:bg-brand-50 hover:text-brand-700 transition-colors duration-fast"
+      :class="{ 'bg-brand-50 text-brand-700': isOpen }"
       aria-label="Notifikasi"
+      :aria-expanded="isOpen"
     >
-      <span class="text-xl group-hover:scale-110 transition-transform duration-300 inline-block origin-top">🔔</span>
+      <Bell class="w-5 h-5" aria-hidden="true" />
       <span
         v-if="unreadCount > 0"
-        class="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full shadow-sm ring-2 ring-white"
+        class="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[11px] leading-none font-semibold text-white bg-red-500 rounded-full ring-2 ring-white tabular-nums"
       >
         {{ unreadCount > 99 ? '99+' : unreadCount }}
       </span>
     </button>
 
-    <!-- Teleport ke body: lepas dari batasan lebar sidebar (288px) supaya
-         dropdown tidak menutupi menu tree di bawahnya. Selalu ditempatkan
-         fixed di pojok kanan atas viewport. -->
+    <!-- Teleport ke body supaya dropdown tidak terpotong container header.
+         Mobile: selebar layar dengan margin 12px. Desktop: panel 384px di kanan. -->
     <Teleport to="body">
       <transition name="dropdown">
         <div
           v-if="isOpen"
           ref="dropdownEl"
-          class="fixed top-16 right-4 sm:top-5 sm:right-8 w-80 max-w-[90vw] bg-white/95 backdrop-blur-xl rounded-2xl shadow-soft border border-gray-100 z-[100] overflow-hidden"
+          class="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] sm:inset-x-auto sm:right-6 sm:w-96 bg-white rounded-2xl shadow-raised border border-brand-100 z-[100] overflow-hidden"
         >
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 class="text-sm font-semibold text-gray-700">Notifikasi Terbaru</h3>
+          <div class="flex items-center justify-between gap-3 px-4 h-12 border-b border-brand-100">
+            <h3 class="text-sm font-semibold text-ink">Notifikasi Terbaru</h3>
             <button
               @click="markAllRead"
-              class="text-xs text-primary hover:underline"
+              class="flex items-center gap-1 h-9 px-2 -mr-2 rounded-lg text-xs font-medium text-brand-700 hover:bg-brand-50"
             >
+              <CheckCheck class="w-4 h-4" aria-hidden="true" />
               Tandai semua dibaca
             </button>
           </div>
 
-          <div v-if="loading" class="p-4 text-center text-sm text-gray-400">
-            Memuat...
+          <div v-if="loading" class="p-6 flex justify-center text-ink-muted">
+            <LoaderCircle class="w-5 h-5 animate-spin" aria-hidden="true" />
+            <span class="sr-only">Memuat...</span>
           </div>
-          <div v-else-if="errorMessage" class="p-4 text-center text-sm text-red-500">
+          <div v-else-if="errorMessage" class="p-4 text-center text-sm text-red-600">
             {{ errorMessage }}
           </div>
-          <div v-else-if="!notifications.length" class="p-6 text-center text-sm text-gray-400">
+          <div v-else-if="!notifications.length" class="p-8 flex flex-col items-center gap-2 text-sm text-ink-muted">
+            <Inbox class="w-6 h-6 text-brand-300" aria-hidden="true" />
             Belum ada notifikasi.
           </div>
-          <ul v-else class="max-h-96 overflow-y-auto divide-y divide-gray-100">
+          <ul v-else class="max-h-[70dvh] sm:max-h-96 overflow-y-auto overscroll-contain divide-y divide-brand-50">
             <li
               v-for="n in notifications"
               :key="n.id"
-              class="px-4 py-3 hover:bg-gray-50 transition-colors"
-              :class="{ 'bg-green-50/50': !notifIsRead(n) }"
+              class="px-4 py-3"
+              :class="{ 'bg-brand-50/60': !notifIsRead(n) }"
             >
-              <div class="flex items-start gap-2">
-                <span class="mt-1 w-2 h-2 rounded-full shrink-0" :class="notifIsRead(n) ? 'bg-gray-300' : 'bg-primary'"></span>
+              <div class="flex items-start gap-3">
+                <span class="mt-1.5 w-2 h-2 rounded-full shrink-0" :class="notifIsRead(n) ? 'bg-gray-300' : 'bg-primary'"></span>
                 <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-800 truncate">{{ notifTitle(n) }}</p>
-                  <p class="text-xs text-gray-500 line-clamp-2">{{ notifMessage(n) }}</p>
-                  <p class="text-[11px] text-gray-400 mt-1">{{ formatDate(notifTime(n)) }}</p>
+                  <p class="text-sm font-medium text-ink truncate">{{ notifTitle(n) }}</p>
+                  <p class="text-xs text-ink-muted line-clamp-2">{{ notifMessage(n) }}</p>
+                  <p class="text-xs text-ink-muted/80 mt-1">{{ formatDate(notifTime(n)) }}</p>
                 </div>
               </div>
             </li>
@@ -155,13 +160,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.15s ease;
+.dropdown-enter-active {
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
 }
-.dropdown-enter-from,
+.dropdown-leave-active {
+  transition: opacity 100ms ease-in;
+}
+.dropdown-enter-from {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 .dropdown-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
 }
 </style>

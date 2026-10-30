@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 const pushMock = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushMock }),
+  useRoute: () => ({ path: '/dashboard' }),
   RouterLink: { template: '<a><slot /></a>' },
   RouterView: { template: '<div />' }
 }))
@@ -146,5 +147,45 @@ describe('MainLayout — menu visibility per role', () => {
     const store = useAuthStore()
     expect(store.accessToken).toBeNull()
     expect(pushMock).toHaveBeenCalledWith('/login')
+  })
+
+  it('mobile bottom nav admin: maksimal 4 tab menu + "Lainnya"', () => {
+    loginAs('admin')
+    const wrapper = mount(MainLayout, mountOpts)
+    const bottomNav = wrapper.findAll('nav').find((n) => n.text().includes('Lainnya'))
+    const tabs = bottomNav.findAll('a')
+    expect(tabs.map((t) => t.text())).toEqual(['Dashboard', 'Absensi', 'Tamu', 'Inventaris'])
+    expect(bottomNav.text()).not.toContain('Fasilitas')
+    expect(bottomNav.text()).not.toContain('Users')
+  })
+
+  it('klik "Lainnya" → sheet berisi menu sisa (Fasilitas, Users), Profil, Keluar', async () => {
+    loginAs('admin')
+    const wrapper = mount(MainLayout, mountOpts)
+    expect(wrapper.find('#more-sheet').exists()).toBe(false)
+    const moreBtn = wrapper.findAll('button').find((b) => b.text().includes('Lainnya'))
+    await moreBtn.trigger('click')
+    const sheet = wrapper.find('#more-sheet')
+    expect(sheet.exists()).toBe(true)
+    expect(sheet.text()).toContain('Fasilitas')
+    expect(sheet.text()).toContain('Users')
+    expect(sheet.text()).toContain('Profil Saya')
+    expect(sheet.text()).toContain('Keluar')
+  })
+
+  it('resident (3 menu) → semua menu muat di bottom nav, sheet hanya Profil + Keluar', async () => {
+    loginAs('resident')
+    const wrapper = mount(MainLayout, mountOpts)
+    const bottomNav = wrapper.findAll('nav').find((n) => n.text().includes('Lainnya'))
+    expect(bottomNav.findAll('a').map((t) => t.text())).toEqual(['Dashboard', 'Absensi', 'Inventaris'])
+    await wrapper.findAll('button').find((b) => b.text().includes('Lainnya')).trigger('click')
+    const sheetLinks = wrapper.find('#more-sheet').findAll('a').map((a) => a.text())
+    expect(sheetLinks).toEqual(['Profil Saya'])
+  })
+
+  it('judul halaman di header mengikuti route aktif', () => {
+    loginAs('admin')
+    const wrapper = mount(MainLayout, mountOpts)
+    expect(wrapper.find('header h1').text()).toBe('Dashboard')
   })
 })

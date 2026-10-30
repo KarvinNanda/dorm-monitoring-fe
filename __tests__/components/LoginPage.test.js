@@ -136,4 +136,19 @@ describe('LoginPage', () => {
     expect(wrapper.text()).toContain('Response login tidak valid')
     expect(pushMock).not.toHaveBeenCalled()
   })
+
+  it('input punya autocomplete untuk password manager', () => {
+    const wrapper = mount(LoginPage)
+    expect(wrapper.find('input[type="email"]').attributes('autocomplete')).toBe('username')
+    expect(wrapper.find('input[type="password"]').attributes('autocomplete')).toBe('current-password')
+  })
+
+  it('tombol mata → tampilkan / sembunyikan kata sandi', async () => {
+    const wrapper = mount(LoginPage)
+    const toggle = wrapper.find('button[aria-label="Tampilkan kata sandi"]')
+    await toggle.trigger('click')
+    expect(wrapper.find('#login-password').attributes('type')).toBe('text')
+    await wrapper.find('button[aria-label="Sembunyikan kata sandi"]').trigger('click')
+    expect(wrapper.find('#login-password').attributes('type')).toBe('password')
+  })
 })

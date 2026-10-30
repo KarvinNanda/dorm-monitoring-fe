@@ -1,6 +1,19 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  Building2,
+  ChevronRight,
+  Clock,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  UserRound,
+  Users,
+  UsersRound,
+  X
+} from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
@@ -10,21 +23,51 @@ import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const user = computed(() => authStore.user)
 const userRoles = computed(() => authStore.roles)
+const userInitial = computed(() => user.value?.name?.charAt(0).toUpperCase() || 'U')
 
 const menuItems = computed(() => {
   const items = [
-    { label: 'Dashboard', path: '/dashboard', icon: '🌿' },
-    { label: 'Absensi', path: '/absen', icon: '🍃',roles: ['admin', 'resident'] },
-    { label: 'Tamu', path: '/tamu', icon: '🌱' ,roles: ['admin', 'receptionist']},
-    { label: 'Inventaris', path: '/inventory', icon: '📦', roles: ['admin', 'receptionist', 'resident'] },
-    { label: 'Fasilitas', path: '/facility', icon: '🏛️' ,roles: ['admin']},
-    { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] }
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Absensi', path: '/absen', icon: Clock, roles: ['admin', 'resident'] },
+    { label: 'Tamu', path: '/tamu', icon: UsersRound, roles: ['admin', 'receptionist'] },
+    { label: 'Inventaris', path: '/inventory', icon: Package, roles: ['admin', 'receptionist', 'resident'] },
+    { label: 'Fasilitas', path: '/facility', icon: Building2, roles: ['admin'] },
+    { label: 'Users', path: '/users', icon: Users, roles: ['admin'] }
   ]
   return items.filter((i) => !i.roles || authStore.hasAnyRole(i.roles))
 })
+
+// Mobile bottom nav: at most 4 menu tabs + "Lainnya" (5 targets in total).
+// Whatever does not fit moves into the "Lainnya" sheet with Profil and Keluar.
+const MAX_TABS = 4
+const tabItems = computed(() => menuItems.value.slice(0, MAX_TABS))
+const overflowItems = computed(() => menuItems.value.slice(MAX_TABS))
+
+function isActive(path) {
+  return route.path === path || route.path.startsWith(`${path}/`)
+}
+
+const pageTitle = computed(() => {
+  if (isActive('/profile')) return 'Profil Saya'
+  return menuItems.value.find((i) => isActive(i.path))?.label || 'Rumah Alam Bahagia'
+})
+
+const moreOpen = ref(false)
+const moreActive = computed(
+  () => isActive('/profile') || overflowItems.value.some((i) => isActive(i.path))
+)
+
+watch(() => route.path, () => { moreOpen.value = false })
+
+function onKeydown(event) {
+  if (event.key === 'Escape') moreOpen.value = false
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 const loggingOut = ref(false)
 
@@ -46,196 +89,241 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-[#f4f7f6] overflow-hidden">
-    <!-- SIDEBAR (DESKTOP) -->
-    <aside class="w-72 glass-panel hidden md:flex flex-col m-4 rounded-3xl overflow-hidden z-20 border-white/60">
-      <!-- Header / Logo -->
-      <div class="p-6">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
-            <img :src="logoUrl" alt="Logo" class="w-8 h-8 object-contain" />
-          </div>
-          <div>
-            <h1 class="text-lg font-bold text-gray-800 leading-tight">Sistem Internal</h1>
-          </div>
+  <div class="min-h-dvh bg-surface md:flex">
+    <!-- SIDEBAR (desktop) -->
+    <aside class="hidden md:flex md:flex-col md:w-60 lg:w-64 md:shrink-0 md:sticky md:top-0 md:h-dvh bg-white border-r border-brand-100">
+      <div class="flex items-center gap-3 px-5 h-16 border-b border-brand-100">
+        <img :src="logoUrl" alt="" class="w-9 h-9 object-contain" />
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-ink leading-tight truncate">Rumah Alam Bahagia</p>
+          <p class="text-xs text-ink-muted leading-tight">Sistem Internal</p>
         </div>
       </div>
 
-      <!-- Navigation -->
-      <nav class="flex-1 px-4 py-2 overflow-y-auto">
-        <div class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 px-3">Menu Utama</div>
-        <div class="space-y-1">
-          <router-link
-            v-for="(item, idx) in menuItems"
-            :key="item.path"
-            :to="item.path"
-            class="group flex items-center gap-3 px-3 py-2.5 rounded-2xl text-gray-500 transition-all duration-300 hover:bg-white hover:shadow-soft hover:text-primary hover:translate-x-1 relative overflow-hidden"
-            active-class="active-nav-item"
-            :style="{ animationDelay: `${idx * 50}ms` }"
-          >
-            <!-- Background highlight (active) -->
-            <div class="absolute inset-0 bg-gradient-to-r from-green-50 to-transparent opacity-0 group-[.active-nav-item]:opacity-100 transition-opacity duration-300"></div>
-            
-            <div class="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50/50 group-hover:bg-green-50 group-[.active-nav-item]:bg-green-100 transition-colors z-10 shadow-sm border border-transparent group-[.active-nav-item]:border-green-200/50">
-              <span class="text-lg group-hover:scale-110 transition-transform duration-300">{{ item.icon }}</span>
-            </div>
-            <span class="font-medium z-10">{{ item.label }}</span>
-            
-            <!-- Active Indicator -->
-            <div class="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary opacity-0 group-[.active-nav-item]:opacity-100 transition-opacity z-10"></div>
-          </router-link>
-        </div>
+      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1" aria-label="Menu utama">
+        <router-link
+          v-for="item in menuItems"
+          :key="item.path"
+          :to="item.path"
+          :aria-current="isActive(item.path) ? 'page' : undefined"
+          class="flex items-center gap-3 h-10 px-3 rounded-xl text-sm font-medium transition-colors duration-fast"
+          :class="isActive(item.path)
+            ? 'bg-brand-600 text-white'
+            : 'text-ink-muted hover:bg-brand-50 hover:text-brand-700'"
+        >
+          <component :is="item.icon" class="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+          <span>{{ item.label }}</span>
+        </router-link>
       </nav>
 
-      <!-- User Profile / Footer -->
-      <div class="p-4 mt-auto">
-        <div class="bg-white/60 backdrop-blur-md rounded-2xl p-3 shadow-soft mb-3 border border-white">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-100 to-green-200 text-primary flex items-center justify-center font-bold text-lg shadow-inner">
-              {{ user?.name?.charAt(0).toUpperCase() || 'U' }}
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-semibold text-sm text-gray-800 truncate">{{ user?.name || 'Pengguna' }}</div>
-              <div class="flex flex-wrap gap-1 mt-1">
-                <span
-                  v-for="r in userRoles"
-                  :key="r"
-                  class="text-[10px] bg-white text-primary px-2 py-0.5 rounded-md capitalize font-medium shadow-sm border border-green-100"
-                >{{ r }}</span>
-                <span
-                  v-if="!userRoles.length"
-                  class="text-[10px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md shadow-sm border border-gray-100"
-                >tanpa role</span>
-              </div>
-            </div>
-          </div>
-          
-          <router-link
-            to="/profile"
-            class="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:text-primary hover:bg-white rounded-xl transition-all duration-200 shadow-sm border border-transparent hover:border-gray-100"
-          >
-            <span class="text-base">👤</span> Profil Saya
-          </router-link>
-        </div>
-        
-        <button
-          @click="handleLogout"
-          class="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-red-600 bg-white hover:bg-red-50 rounded-xl transition-all duration-200 shadow-sm border border-gray-100 hover:border-red-100 hover:shadow-soft"
+      <div class="p-3 border-t border-brand-100 space-y-1">
+        <router-link
+          to="/profile"
+          class="flex items-center gap-3 p-2 rounded-xl transition-colors duration-fast"
+          :class="isActive('/profile') ? 'bg-brand-50' : 'hover:bg-brand-50'"
         >
+          <span class="w-9 h-9 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold shrink-0">
+            {{ userInitial }}
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-ink truncate">{{ user?.name || 'Pengguna' }}</span>
+            <span class="block text-xs text-ink-muted truncate capitalize">
+              {{ userRoles.length ? userRoles.join(', ') : 'tanpa role' }}
+            </span>
+          </span>
+          <ChevronRight class="w-4 h-4 text-ink-muted shrink-0" aria-hidden="true" />
+        </router-link>
+
+        <button
+          type="button"
+          :disabled="loggingOut"
+          class="flex items-center gap-3 w-full h-10 px-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors duration-fast disabled:opacity-50"
+          @click="handleLogout"
+        >
+          <LogOut class="w-[18px] h-[18px]" aria-hidden="true" />
           <span>Keluar</span>
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
         </button>
       </div>
     </aside>
 
-    <!-- MOBILE HEADER -->
-    <div class="md:hidden fixed top-0 left-0 right-0 glass-header z-50 p-4 flex items-center justify-between shadow-sm">
-      <div class="flex items-center gap-2">
-        <img :src="logoUrl" alt="Logo" class="w-8 h-8 object-contain" />
-        <h1 class="text-base font-bold text-gray-800">Sistem Internal</h1>
-      </div>
-      <div class="flex items-center gap-3">
-        <NotificationBell />
-        <button @click="handleLogout" class="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- MOBILE BOTTOM NAV -->
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 z-50 flex px-2 py-2 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-      <router-link
-        v-for="item in menuItems"
-        :key="item.path"
-        :to="item.path"
-        class="flex-1 py-1.5 flex flex-col items-center justify-center text-gray-400 transition-colors relative group"
-        active-class="text-primary mobile-active-item"
-      >
-        <!-- Active Pill Background -->
-        <div class="absolute inset-0 bg-green-50/80 rounded-2xl opacity-0 group-[.mobile-active-item]:opacity-100 transition-opacity scale-90 group-[.mobile-active-item]:scale-100 duration-300 mx-1"></div>
-        
-        <div class="text-xl mb-0.5 z-10 group-[.mobile-active-item]:-translate-y-1 transition-transform duration-300 drop-shadow-sm">{{ item.icon }}</div>
-        <span class="text-[10px] font-semibold z-10">{{ item.label }}</span>
-      </router-link>
-    </nav>
-
-    <!-- KONTEN UTAMA -->
-    <div class="flex-1 flex flex-col min-w-0 md:pt-2 md:pb-4 md:pr-4 relative">
-      <!-- Top navbar (Desktop) -->
-      <header class="hidden md:flex items-center justify-end px-2 pb-2 pt-0 bg-transparent z-10 w-full relative">
-        <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-4">
+    <!-- KONTEN -->
+    <div class="flex-1 min-w-0 flex flex-col">
+      <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-brand-100 pt-safe">
+        <div class="flex items-center gap-3 h-14 px-4 md:px-6">
+          <img :src="logoUrl" alt="" class="w-8 h-8 object-contain md:hidden" />
+          <h1 class="flex-1 min-w-0 text-base md:text-lg font-semibold text-ink truncate">{{ pageTitle }}</h1>
           <NotificationBell />
         </div>
       </header>
 
-      <main class="flex-1 bg-white md:rounded-3xl shadow-soft border border-white overflow-hidden relative flex flex-col pt-20 md:pt-0 pb-24 md:pb-0 z-10 mx-0 md:mx-0">
-        <!-- Decorative subtle background element -->
-        <div class="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-green-50 to-transparent rounded-full blur-3xl opacity-60 -z-10 -translate-y-1/2 translate-x-1/4"></div>
-        <div class="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-gray-50 to-transparent rounded-full blur-2xl opacity-60 -z-10 translate-y-1/3 -translate-x-1/4"></div>
-        
-        <div class="flex-1 overflow-auto p-4 md:p-5 scroll-smooth">
-          <router-view v-slot="{ Component }">
-            <transition name="fade-slide" mode="out-in">
-              <component :is="Component" />
-            </transition>
-          </router-view>
-        </div>
+      <main class="flex-1 w-full max-w-6xl mx-auto px-4 pt-4 pb-28 md:px-6 md:py-6">
+        <router-view v-slot="{ Component }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </main>
     </div>
+
+    <!-- BOTTOM NAV (mobile) -->
+    <nav
+      class="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-brand-100 pb-safe"
+      aria-label="Menu utama"
+    >
+      <div class="flex h-16">
+        <router-link
+          v-for="item in tabItems"
+          :key="item.path"
+          :to="item.path"
+          :aria-current="isActive(item.path) ? 'page' : undefined"
+          class="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 text-xs font-medium pressable"
+          :class="isActive(item.path) ? 'text-brand-700' : 'text-ink-muted'"
+        >
+          <span
+            class="flex items-center justify-center w-14 h-8 rounded-full transition-colors duration-base"
+            :class="isActive(item.path) ? 'bg-brand-100' : ''"
+          >
+            <component :is="item.icon" class="w-5 h-5" aria-hidden="true" />
+          </span>
+          <span class="truncate max-w-full px-1">{{ item.label }}</span>
+        </router-link>
+
+        <button
+          type="button"
+          class="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 text-xs font-medium pressable"
+          :class="moreOpen || moreActive ? 'text-brand-700' : 'text-ink-muted'"
+          :aria-expanded="moreOpen"
+          aria-controls="more-sheet"
+          @click="moreOpen = !moreOpen"
+        >
+          <span
+            class="flex items-center justify-center w-14 h-8 rounded-full transition-colors duration-base"
+            :class="moreOpen || moreActive ? 'bg-brand-100' : ''"
+          >
+            <Menu class="w-5 h-5" aria-hidden="true" />
+          </span>
+          <span>Lainnya</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- SHEET "Lainnya" (mobile) -->
+    <transition name="fade">
+      <div
+        v-if="moreOpen"
+        class="md:hidden fixed inset-0 z-40 bg-black/30"
+        aria-hidden="true"
+        @click="moreOpen = false"
+      ></div>
+    </transition>
+    <transition name="sheet">
+      <div
+        v-if="moreOpen"
+        id="more-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu lainnya"
+        class="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-raised pb-safe"
+      >
+        <div class="flex items-center justify-between px-5 pt-4 pb-2">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-semibold shrink-0">
+              {{ userInitial }}
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-ink truncate">{{ user?.name || 'Pengguna' }}</p>
+              <p class="text-xs text-ink-muted truncate capitalize">
+                {{ userRoles.length ? userRoles.join(', ') : 'tanpa role' }}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-ink-muted hover:bg-brand-50"
+            aria-label="Tutup menu"
+            @click="moreOpen = false"
+          >
+            <X class="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div class="px-3 pb-4 space-y-1">
+          <router-link
+            v-for="item in overflowItems"
+            :key="item.path"
+            :to="item.path"
+            class="flex items-center gap-3 h-12 px-3 rounded-xl text-sm font-medium"
+            :class="isActive(item.path) ? 'bg-brand-50 text-brand-700' : 'text-ink'"
+          >
+            <component :is="item.icon" class="w-5 h-5 text-brand-700" aria-hidden="true" />
+            <span class="flex-1">{{ item.label }}</span>
+            <ChevronRight class="w-4 h-4 text-ink-muted" aria-hidden="true" />
+          </router-link>
+          <router-link
+            to="/profile"
+            class="flex items-center gap-3 h-12 px-3 rounded-xl text-sm font-medium"
+            :class="isActive('/profile') ? 'bg-brand-50 text-brand-700' : 'text-ink'"
+          >
+            <UserRound class="w-5 h-5 text-brand-700" aria-hidden="true" />
+            <span class="flex-1">Profil Saya</span>
+            <ChevronRight class="w-4 h-4 text-ink-muted" aria-hidden="true" />
+          </router-link>
+          <button
+            type="button"
+            :disabled="loggingOut"
+            class="flex items-center gap-3 w-full h-12 px-3 rounded-xl text-sm font-medium text-red-600 disabled:opacity-50"
+            @click="handleLogout"
+          >
+            <LogOut class="w-5 h-5" aria-hidden="true" />
+            <span>Keluar</span>
+          </button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <style>
-/* Global page transitions */
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+/* Page switch: short fade so navigation never feels like waiting. */
+.page-enter-active {
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
-
-.fade-slide-enter-from {
+.page-leave-active {
+  transition: opacity 80ms ease-in;
+}
+.page-enter-from {
   opacity: 0;
-  transform: translateY(15px) scale(0.99);
+  transform: translateY(4px);
 }
-
-.fade-slide-leave-to {
+.page-leave-to {
   opacity: 0;
-  transform: translateY(-15px) scale(0.99);
 }
 
-/* Safe area padding for mobile iOS devices */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 160ms ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-active {
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.sheet-leave-active {
+  transition: transform 160ms ease-in;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  transform: translateY(100%);
+}
+
+/* Safe areas for notched phones (needs viewport-fit=cover in index.html). */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 12px);
-}
-
-/* Staggered animation for sidebar items */
-.group {
-  animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* Custom Scrollbar for inner content */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent; 
-}
-::-webkit-scrollbar-thumb {
-  background: #e2e8f0; 
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1; 
+  padding-bottom: env(safe-area-inset-bottom);
 }
 </style>
