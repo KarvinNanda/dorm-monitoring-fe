@@ -1,28 +1,38 @@
 <script setup>
-import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, onMounted } from 'vue'
+import { KeyRound } from 'lucide-vue-next'
+import AppToast from '@/components/AppToast.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { authService } from '@/services/authService'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
 
 const authStore = useAuthStore()
 
+// ============ TOAST ============
+const toast = ref({ show: false, type: 'success', message: '' })
+let toastTimer = null
+function showToast(message, type = 'success') {
+  toast.value = { show: true, type, message }
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value.show = false), 2500)
+}
+
 // ============ STATE ============
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const saveError = ref('')
-const successMessage = ref('')
 
 const profile = ref(null)
 const form = ref({ name: '', email: '', phoneNumber: '' })
 
-// Modal ganti password sendiri
+// Modal ganti kata sandi sendiri
 const showPasswordModal = ref(false)
 const passwordForm = ref({ currentPassword: '', newPassword: '', confirmPassword: '' })
 const passwordError = ref('')
 const savingPassword = ref(false)
-const passwordSuccess = ref('')
 
 // ============ HELPERS ============
 function extractError(err, fallback = 'Terjadi kesalahan') {
@@ -41,6 +51,8 @@ const isActive = computed(() => {
   if (profile.value.status) return String(profile.value.status).toLowerCase() === 'active'
   return true
 })
+
+const initial = computed(() => (profile.value?.name || '?').charAt(0).toUpperCase())
 
 // ============ LOAD ============
 async function fetchMe() {
@@ -68,7 +80,6 @@ onMounted(fetchMe)
 // ============ UPDATE ============
 async function saveProfile() {
   saveError.value = ''
-  successMessage.value = ''
 
   if (!form.value.name?.trim()) {
     saveError.value = 'Nama wajib diisi'
@@ -85,8 +96,7 @@ async function saveProfile() {
     const updated = await userService.updateMe(payload)
     profile.value = updated || profile.value
     if (updated) authStore.setUser(updated)
-    successMessage.value = 'Profil berhasil diperbarui'
-    setTimeout(() => (successMessage.value = ''), 2500)
+    showToast('Profil berhasil diperbarui')
   } catch (err) {
     saveError.value = extractError(err, 'Gagal memperbarui profil')
   } finally {
@@ -94,11 +104,10 @@ async function saveProfile() {
   }
 }
 
-// ============ RESET PASSWORD ============
+// ============ GANTI KATA SANDI ============
 function openPasswordModal() {
   passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' }
   passwordError.value = ''
-  passwordSuccess.value = ''
   showPasswordModal.value = true
 }
 
@@ -106,27 +115,25 @@ async function submitPassword() {
   passwordError.value = ''
   const { currentPassword, newPassword, confirmPassword } = passwordForm.value
   if (!currentPassword) {
-    passwordError.value = 'Password saat ini wajib diisi'
+    passwordError.value = 'Kata sandi saat ini wajib diisi'
     return
   }
   if (!newPassword || newPassword.length < 8) {
-    passwordError.value = 'Password baru minimal 8 karakter'
+    passwordError.value = 'Kata sandi baru minimal 8 karakter'
     return
   }
   if (newPassword !== confirmPassword) {
-    passwordError.value = 'Konfirmasi password tidak cocok'
+    passwordError.value = 'Konfirmasi kata sandi tidak cocok'
     return
   }
 
   savingPassword.value = true
   try {
     await authService.resetPassword(currentPassword, newPassword)
-    passwordSuccess.value = 'Password berhasil diganti'
-    setTimeout(() => {
-      showPasswordModal.value = false
-    }, 1200)
+    showPasswordModal.value = false
+    showToast('Kata sandi berhasil diganti')
   } catch (err) {
-    passwordError.value = extractError(err, 'Gagal mengganti password')
+    passwordError.value = extractError(err, 'Gagal mengganti kata sandi')
   } finally {
     savingPassword.value = false
   }
@@ -134,166 +141,124 @@ async function submitPassword() {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto">
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">Profil Saya</h1>
-      <p class="text-sm text-gray-500">Kelola informasi akun Anda.</p>
-    </div>
+  <div class="max-w-2xl mx-auto space-y-4">
+    <AppToast :toast="toast" />
 
-    <!-- Loading / Error -->
-    <div v-if="loading" class="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-400 text-sm">
-      Memuat profil...
-    </div>
-    <div v-else-if="loadError" class="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 text-sm flex items-start justify-between gap-3">
+    <div v-if="loading" class="card empty-state" aria-busy="true">Memuat profil...</div>
+    <div v-else-if="loadError" class="form-error items-center justify-between" role="alert">
       <span>{{ loadError }}</span>
-      <button @click="fetchMe" class="text-red-700 underline text-xs shrink-0">Coba lagi</button>
+      <button type="button" class="btn btn-secondary h-9 shrink-0" @click="fetchMe">Coba lagi</button>
     </div>
 
-    <!-- Content -->
-    <div v-else class="space-y-6">
-      <!-- Identity Card -->
-      <div class="bg-white border border-gray-200 rounded-xl p-6 flex items-center gap-4">
-        <div class="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold">
-          {{ (profile?.name || '?').charAt(0).toUpperCase() }}
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-lg font-semibold text-gray-800 truncate">{{ profile?.name || '—' }}</div>
-          <div class="text-sm text-gray-500 truncate">{{ profile?.email || '—' }}</div>
+    <template v-else>
+      <!-- Identitas -->
+      <section class="card p-4 sm:p-5 flex items-center gap-4" aria-label="Identitas akun">
+        <span
+          class="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xl sm:text-2xl font-semibold shrink-0"
+          aria-hidden="true"
+        >{{ initial }}</span>
+        <div class="min-w-0 flex-1">
+          <p class="text-base sm:text-lg font-semibold text-ink truncate">{{ profile?.name || '-' }}</p>
+          <p class="text-sm text-ink-muted truncate">{{ profile?.email || '-' }}</p>
           <div class="mt-2 flex flex-wrap gap-1.5">
-            <span
-              v-for="rn in roleLabels"
-              :key="rn"
-              class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-primary capitalize"
-            >
-              {{ rn }}
-            </span>
-            <span
-              class="text-xs font-medium px-2 py-0.5 rounded-full"
-              :class="isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
-            >
-              {{ isActive ? 'active' : 'inactive' }}
-            </span>
+            <span v-for="rn in roleLabels" :key="rn" class="chip chip-brand capitalize">{{ rn }}</span>
+            <span class="chip" :class="isActive ? 'chip-brand' : 'chip-gray'">{{ isActive ? 'Aktif' : 'Nonaktif' }}</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Edit Form -->
-      <div class="bg-white border border-gray-200 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-semibold text-gray-800">Informasi Akun</h2>
-          <button
-            @click="openPasswordModal"
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
-          >
-            🔑 Ganti Password
-          </button>
-        </div>
-
-        <form @submit.prevent="saveProfile" class="space-y-4">
-          <div v-if="saveError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ saveError }}</div>
-          <div v-if="successMessage" class="bg-green-50 text-green-700 text-sm p-3 rounded-lg">{{ successMessage }}</div>
-
+      <!-- Informasi akun -->
+      <section class="card p-4 sm:p-5" aria-labelledby="profile-info-title">
+        <h2 id="profile-info-title" class="text-base font-semibold text-ink mb-4">Informasi akun</h2>
+        <form class="space-y-4" @submit.prevent="saveProfile">
+          <p v-if="saveError" class="form-error" role="alert">{{ saveError }}</p>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input
-              v-model="form.name"
-              type="text"
-              required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
+            <label for="profile-name" class="field-label">Nama</label>
+            <input id="profile-name" v-model="form.name" type="text" required autocomplete="name" class="field" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              v-model="form.email"
-              type="email"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
+            <label for="profile-email" class="field-label">Email</label>
+            <input id="profile-email" v-model="form.email" type="email" autocomplete="email" class="field" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">No. Telepon (opsional)</label>
+            <label for="profile-phone" class="field-label">No. telepon <span class="font-normal text-ink-muted">(opsional)</span></label>
             <input
+              id="profile-phone"
               v-model="form.phoneNumber"
-              type="text"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="08xxxxxxxxxx"
+              class="field"
             />
           </div>
-
-          <div class="pt-2">
-            <button
-              type="submit"
-              :disabled="saving"
-              class="bg-primary text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              {{ saving ? 'Menyimpan...' : 'Simpan Perubahan' }}
+          <div class="pt-1">
+            <button type="submit" class="btn btn-primary w-full sm:w-auto" :disabled="saving">
+              {{ saving ? 'Menyimpan...' : 'Simpan perubahan' }}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </section>
 
-    <!-- ============ PASSWORD MODAL ============ -->
-    <div
-      v-if="showPasswordModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
-      @click.self="showPasswordModal = false"
-    >
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h3 class="text-lg font-bold text-gray-800 mb-1">Ganti Password</h3>
-        <p class="text-sm text-gray-500 mb-4">Masukkan password saat ini, lalu password baru.</p>
-        <form @submit.prevent="submitPassword" class="space-y-4">
-          <div v-if="passwordError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ passwordError }}</div>
-          <div v-if="passwordSuccess" class="bg-green-50 text-green-700 text-sm p-3 rounded-lg">{{ passwordSuccess }}</div>
+      <!-- Keamanan -->
+      <section class="card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3" aria-labelledby="profile-security-title">
+        <div class="flex-1 min-w-0">
+          <h2 id="profile-security-title" class="text-base font-semibold text-ink">Kata sandi</h2>
+          <p class="text-sm text-ink-muted mt-0.5">Ganti kata sandi secara berkala dan jangan bagikan ke orang lain.</p>
+        </div>
+        <button type="button" class="btn btn-secondary w-full sm:w-auto" @click="openPasswordModal">
+          <KeyRound class="w-4 h-4" aria-hidden="true" />
+          Ganti kata sandi
+        </button>
+      </section>
+    </template>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password Saat Ini</label>
-            <PasswordInput
-              v-model="passwordForm.currentPassword"
-              required
-              autocomplete="current-password"
-              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password Baru</label>
-            <PasswordInput
-              v-model="passwordForm.newPassword"
-              minlength="8"
-              autocomplete="new-password"
-              required
-              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Konfirmasi Password Baru</label>
-            <PasswordInput
-              v-model="passwordForm.confirmPassword"
-              minlength="8"
-              autocomplete="new-password"
-              required
-              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-
-          <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              @click="showPasswordModal = false"
-              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              :disabled="savingPassword"
-              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {{ savingPassword ? 'Menyimpan...' : 'Simpan' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <!-- ============ MODAL GANTI KATA SANDI ============ -->
+    <BaseModal v-model:open="showPasswordModal" title="Ganti Kata Sandi">
+      <form id="password-form" class="space-y-4" @submit.prevent="submitPassword">
+        <p class="text-sm text-ink-muted">Masukkan kata sandi saat ini, lalu kata sandi baru.</p>
+        <p v-if="passwordError" class="form-error" role="alert">{{ passwordError }}</p>
+        <div>
+          <label for="password-current" class="field-label">Kata sandi saat ini</label>
+          <PasswordInput
+            id="password-current"
+            v-model="passwordForm.currentPassword"
+            required
+            autocomplete="current-password"
+            class="field pr-12"
+          />
+        </div>
+        <div>
+          <label for="password-new" class="field-label">Kata sandi baru</label>
+          <PasswordInput
+            id="password-new"
+            v-model="passwordForm.newPassword"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            aria-describedby="password-new-hint"
+            class="field pr-12"
+          />
+          <p id="password-new-hint" class="field-hint">Minimal 8 karakter.</p>
+        </div>
+        <div>
+          <label for="password-confirm" class="field-label">Konfirmasi kata sandi baru</label>
+          <PasswordInput
+            id="password-confirm"
+            v-model="passwordForm.confirmPassword"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            class="field pr-12"
+          />
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showPasswordModal = false">Batal</button>
+        <button type="submit" form="password-form" class="btn btn-primary flex-1" :disabled="savingPassword">
+          {{ savingPassword ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
