@@ -95,6 +95,73 @@
   .pressable {
     @apply transition duration-fast ease-out active:scale-[0.97];
   }
+
+  /* Buttons. 44px tall: comfortable touch target. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl text-sm font-semibold whitespace-nowrap transition duration-fast ease-out active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white hover:bg-forest;
+  }
+  .btn-secondary {
+    @apply bg-card text-ink border border-gray-300 hover:bg-gray-50;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+  .icon-btn {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-lg text-ink-muted hover:bg-gray-100 hover:text-ink transition-colors duration-fast;
+  }
+  .icon-btn-danger {
+    @apply text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300;
+  }
+
+  /* Form fields. 16px text on phones so iOS Safari does not zoom on focus. */
+  .field {
+    @apply w-full h-11 px-3 bg-card border border-gray-300 rounded-xl text-base sm:text-sm text-ink placeholder:text-gray-400 outline-none transition-colors duration-fast focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30;
+  }
+  textarea.field {
+    @apply h-auto py-2.5 resize-none;
+  }
+  .field-label {
+    @apply block text-sm font-medium text-ink mb-1.5;
+  }
+  .field-hint {
+    @apply text-xs text-ink-muted mt-1.5;
+  }
+
+  /* Status chips. Each tone keeps >= 4.5:1 text contrast in both modes. */
+  .chip {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap;
+  }
+  .chip-brand {
+    @apply bg-brand-100 text-brand-800;
+  }
+  .chip-amber {
+    @apply bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300;
+  }
+  .chip-gray {
+    @apply bg-gray-100 text-gray-700;
+  }
+
+  /* Segmented tabs. */
+  .tabs {
+    @apply inline-flex p-1 gap-1 bg-gray-100 rounded-xl;
+  }
+  .tab {
+    @apply h-9 px-3 rounded-lg text-sm font-medium text-ink-muted transition-colors duration-fast hover:text-ink;
+  }
+  .tab[aria-selected='true'],
+  .tab[aria-pressed='true'] {
+    @apply bg-card text-brand-700 shadow-card;
+  }
+
+  .form-error {
+    @apply flex items-start gap-2 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 text-sm p-3 rounded-xl;
+  }
+  .empty-state {
+    @apply px-4 py-10 text-center text-sm text-ink-muted;
+  }
 }
 
 /* Respect the OS "reduce motion" setting: keep state changes, drop movement. */

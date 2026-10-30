@@ -1,6 +1,7 @@
 <script setup>
 import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, onMounted, watch } from 'vue'
+import { confirmDialog } from '@/composables/useConfirm'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -212,7 +213,8 @@ async function saveUser() {
 
 // ============ DELETE ============
 async function removeUser(user) {
-  if (!confirm(`Hapus user "${user.name}"?`)) return
+  const ok = await confirmDialog({ title: 'Hapus user?', message: `User "${user.name}" akan dihapus.` })
+  if (!ok) return
   try {
     await userService.remove(user.id)
     showToast('User berhasil dihapus')

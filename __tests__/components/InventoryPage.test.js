@@ -44,6 +44,7 @@ vi.mock('@/services/itemTransactionService', () => ({
 }))
 
 import InventoryPage from '@/modules/inventory/views/InventoryPage.vue'
+import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { itemService } from '@/services/itemService'
 import { itemCategoryService } from '@/services/itemCategoryService'
 import { itemTransactionService } from '@/services/itemTransactionService'
@@ -97,6 +98,27 @@ describe('InventoryPage', () => {
     await txTab.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('ADD')
+  })
+
+  it('hapus item → dialog konfirmasi → Hapus → remove', async () => {
+    itemService.remove.mockResolvedValueOnce({})
+    const wrapper = mountWithConfirm(InventoryPage)
+    await flushPromises()
+    await wrapper.find('button[title="Hapus"]').trigger('click')
+    expect(await answerConfirm(wrapper, 'Hapus')).toContain('Sapu')
+    expect(itemService.remove).toHaveBeenCalledWith(1)
+    wrapper.unmount()
+  })
+
+  it('hapus kategori → dialog konfirmasi → Hapus → remove', async () => {
+    itemCategoryService.remove.mockResolvedValueOnce({})
+    const wrapper = mountWithConfirm(InventoryPage)
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === 'Kategori').trigger('click')
+    await wrapper.find('button[title="Hapus"]').trigger('click')
+    expect(await answerConfirm(wrapper, 'Hapus')).toContain('Cleaning')
+    expect(itemCategoryService.remove).toHaveBeenCalledWith(1)
+    wrapper.unmount()
   })
 
   it('menampilkan toast error bila itemService.list gagal', async () => {

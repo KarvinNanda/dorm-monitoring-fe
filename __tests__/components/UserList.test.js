@@ -18,6 +18,7 @@ vi.mock('@/services/userService', () => ({
 }))
 
 import UserList from '@/modules/user/views/UserList.vue'
+import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -81,18 +82,23 @@ describe('UserList', () => {
     expect(userService.deactivate).toHaveBeenCalledWith(1)
   })
 
-  it('hapus user → confirm + remove', async () => {
-    const originalConfirm = window.confirm
-    window.confirm = vi.fn(() => true)
+  it('hapus user → dialog konfirmasi → Hapus → remove', async () => {
     userService.remove.mockResolvedValueOnce({})
-    const wrapper = mount(UserList)
+    const wrapper = mountWithConfirm(UserList)
     await flushPromises()
-    const deleteBtn = wrapper.findAll('button').find((b) => b.text().includes('Hapus'))
-    await deleteBtn.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text().includes('Hapus')).trigger('click')
+    expect(await answerConfirm(wrapper, 'Hapus')).toContain('Andi')
+    expect(userService.remove).toHaveBeenCalledWith(1)
+    wrapper.unmount()
+  })
+
+  it('hapus user → Batal → tidak ada request hapus', async () => {
+    const wrapper = mountWithConfirm(UserList)
     await flushPromises()
-    expect(window.confirm).toHaveBeenCalled()
-    expect(userService.remove).toHaveBeenCalled()
-    window.confirm = originalConfirm
+    await wrapper.findAll('button').find((b) => b.text().includes('Hapus')).trigger('click')
+    await answerConfirm(wrapper, 'Batal')
+    expect(userService.remove).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('list error → tampilkan pesan', async () => {
