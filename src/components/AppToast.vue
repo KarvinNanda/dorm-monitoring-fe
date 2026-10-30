@@ -2,10 +2,13 @@
 import { CircleAlert, CircleCheck } from 'lucide-vue-next'
 
 // toast: { show, type: 'success' | 'error', message } — state tetap milik halaman.
+// Di-Teleport ke <body>: posisinya `fixed`, jadi tidak boleh ikut dihitung
+// `space-y-*` halaman (elemen sesudahnya jadi dapat margin ekstra).
 defineProps({ toast: { type: Object, required: true } })
 </script>
 
 <template>
+  <Teleport to="body">
   <div class="fixed inset-x-4 bottom-24 md:inset-x-auto md:right-6 md:bottom-6 z-50 flex justify-center pointer-events-none" role="status" aria-live="polite">
     <Transition name="toast">
       <div
@@ -19,6 +22,7 @@ defineProps({ toast: { type: Object, required: true } })
       </div>
     </Transition>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>
