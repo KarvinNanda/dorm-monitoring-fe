@@ -13,6 +13,6 @@ app.use(createPinia())
 app.use(router)
 app.mount('#app')
 
-// Init OneSignal: SDK script sudah di-load di index.html,
-// ini hanya init({ appId }) + requestPermission + optIn
+// Init OneSignal: SDK script sudah di-load di index.html, ini hanya
+// init({ appId }). Izin notifikasi diminta dari banner di MainLayout.
 initOneSignal()

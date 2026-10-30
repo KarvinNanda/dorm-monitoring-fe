@@ -18,8 +18,10 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
+import { usePushNotifications } from '@/composables/usePushNotifications'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
+import PushPermissionBanner from '@/components/PushPermissionBanner.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import logoUrl from '@/assets/logo-3.png'
 
@@ -70,6 +72,33 @@ function onKeydown(event) {
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// Web push: daftar device ke backend + banner ajakan izin.
+const push = usePushNotifications()
+const pushStatus = push.status
+const pushAsked = ref(false)
+const pushBusy = ref(false)
+const pushDismissed = ref(false)
+const showPushBanner = computed(
+  () =>
+    !pushDismissed.value &&
+    (pushStatus.value === 'default' || (pushAsked.value && pushStatus.value === 'denied'))
+)
+
+async function enablePush() {
+  pushBusy.value = true
+  pushAsked.value = true
+  try {
+    await push.enable()
+  } catch (err) {
+    console.warn('[OneSignal] Minta izin gagal:', err?.message || err)
+  } finally {
+    pushBusy.value = false
+  }
+}
+
+onMounted(() => push.start())
+onBeforeUnmount(() => push.stop())
 
 const loggingOut = ref(false)
 
@@ -162,6 +191,13 @@ async function handleLogout() {
       </header>
 
       <main class="flex-1 w-full max-w-6xl mx-auto px-4 pt-4 pb-28 md:px-6 md:py-6">
+        <PushPermissionBanner
+          v-if="showPushBanner"
+          :blocked="pushStatus === 'denied'"
+          :busy="pushBusy"
+          @enable="enablePush"
+          @dismiss="pushDismissed = true"
+        />
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
             <component :is="Component" />
