@@ -3,8 +3,6 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
-import { userDeviceService } from '@/services/userDeviceService'
-import { getPlayerId } from '@/utils/oneSignal'
 import logoUrl from '@/assets/logo-3.png'
 import { CircleAlert, LoaderCircle, Lock, Mail } from 'lucide-vue-next'
 import PasswordInput from '@/components/PasswordInput.vue'
@@ -35,22 +33,7 @@ async function handleLogin() {
     const userData = await authService.me()
     authStore.setUser(userData)
 
-    // 3) Register OneSignal push token ke backend — HARUS selesai sebelum redirect
-    try {
-      const playerId = await getPlayerId()
-      console.log('[OneSignal] Player ID:', playerId)
-      if (playerId) {
-        await userDeviceService.register(playerId)
-        console.log('[OneSignal] Register berhasil')
-      } else {
-        console.warn('[OneSignal] Player ID null — token tidak terdaftar ke backend')
-      }
-    } catch (pushErr) {
-      // Gagal register push token tidak boleh menghalangi login
-      console.warn('[OneSignal] Register error:', pushErr)
-    }
-
-    // 4) Redirect ke dashboard (SETELAH register selesai)
+    // 3) Redirect ke dashboard. Device push didaftarkan oleh MainLayout.
     router.push('/dashboard')
   } catch (err) {
     // Handle error response

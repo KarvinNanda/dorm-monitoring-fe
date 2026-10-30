@@ -23,7 +23,8 @@ vi.mock('@/services/userDeviceService', () => ({
   }
 }))
 vi.mock('@/utils/oneSignal', () => ({
-  getCurrentPlayerId: vi.fn()
+  getCurrentPlayerId: vi.fn(),
+  whenOneSignalReady: vi.fn()
 }))
 vi.mock('@/services/notificationService', () => ({
   notificationService: {
@@ -37,7 +38,7 @@ vi.mock('@/assets/logo-3.png', () => ({ default: 'logo.png' }))
 import MainLayout from '@/layouts/MainLayout.vue'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
-import { getCurrentPlayerId } from '@/utils/oneSignal'
+import { getCurrentPlayerId, whenOneSignalReady } from '@/utils/oneSignal'
 import { notificationService } from '@/services/notificationService'
 import { useAuthStore } from '@/stores/authStore'
 import { confirmDialog } from '@/composables/useConfirm'
@@ -63,6 +64,7 @@ describe('MainLayout — menu visibility per role', () => {
     pushMock.mockReset()
     userDeviceService.unregister.mockResolvedValue({})
     getCurrentPlayerId.mockReturnValue('player-id-abc-123')
+    whenOneSignalReady.mockResolvedValue(null)
     notificationService.unreadCount.mockResolvedValue({ count: 0 })
     notificationService.list.mockResolvedValue({ data: [], meta: null })
     notificationService.readAll.mockResolvedValue({ counts: 0 })
@@ -199,5 +201,92 @@ describe('MainLayout — menu visibility per role', () => {
     loginAs('admin')
     const wrapper = mount(MainLayout, mountOpts)
     expect(wrapper.find('header h1').text()).toBe('Dashboard')
+  })
+})
+
+/** SDK OneSignal v16 palsu, cukup untuk alur izin di layout. */
+function fakeSdk({ permission = 'default', id = null, optedIn = false, answer = 'granted' } = {}) {
+  const sdk = {
+    Notifications: {
+      permissionNative: permission,
+      isPushSupported: () => true,
+      requestPermission: vi.fn(async () => {
+        sdk.Notifications.permissionNative = answer
+      })
+    },
+    User: {
+      PushSubscription: {
+        id,
+        optedIn,
+        optIn: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      }
+    }
+  }
+  return sdk
+}
+
+describe('MainLayout — izin notifikasi push', () => {
+  const findBtn = (wrapper, label) => wrapper.findAll('button').find((b) => b.text() === label)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    userDeviceService.register.mockResolvedValue({})
+    notificationService.unreadCount.mockResolvedValue({ count: 0 })
+    notificationService.list.mockResolvedValue({ data: [], meta: null })
+    whenOneSignalReady.mockResolvedValue(null)
+  })
+
+  it('izin belum ditanya → banner tampil; prompt browser baru muncul setelah klik Aktifkan', async () => {
+    loginAs('admin')
+    const sdk = fakeSdk()
+    whenOneSignalReady.mockResolvedValue(sdk)
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Aktifkan notifikasi')
+    expect(sdk.Notifications.requestPermission).not.toHaveBeenCalled()
+
+    await findBtn(wrapper, 'Aktifkan').trigger('click')
+    await flushPromises()
+    expect(sdk.Notifications.requestPermission).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('Aktifkan notifikasi')
+  })
+
+  it('klik Nanti → banner hilang tanpa memanggil prompt', async () => {
+    loginAs('admin')
+    const sdk = fakeSdk()
+    whenOneSignalReady.mockResolvedValue(sdk)
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    await findBtn(wrapper, 'Nanti').trigger('click')
+    expect(wrapper.text()).not.toContain('Aktifkan notifikasi')
+    expect(sdk.Notifications.requestPermission).not.toHaveBeenCalled()
+  })
+
+  it('user menekan Block di prompt → tampil petunjuk cara membuka blokir', async () => {
+    loginAs('admin')
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ answer: 'denied' }))
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    await findBtn(wrapper, 'Aktifkan').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Notifikasi diblokir')
+  })
+
+  it('sudah subscribe → daftar device saat layout dibuka, tanpa banner', async () => {
+    loginAs('admin')
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'granted', id: 'sub-9', optedIn: true }))
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    expect(userDeviceService.register).toHaveBeenCalledWith('sub-9')
+    expect(wrapper.text()).not.toContain('Aktifkan notifikasi')
+  })
+
+  it('SDK tidak tersedia → tidak ada banner', async () => {
+    loginAs('admin')
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Aktifkan notifikasi')
   })
 })

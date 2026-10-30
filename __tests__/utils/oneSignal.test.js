@@ -1,82 +1,95 @@
 /**
- * Test oneSignal utility: initOneSignal, getPlayerId, getCurrentPlayerId.
+ * Test oneSignal utility: initOneSignal, whenOneSignalReady, getCurrentPlayerId.
+ *
+ * Modul menyimpan promise "SDK siap" di level modul, jadi tiap test memakai
+ * instance modul baru (vi.resetModules + import dinamis).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { initOneSignal, getPlayerId, getCurrentPlayerId } from '@/utils/oneSignal'
 
-describe('oneSignal utility', () => {
-  beforeEach(() => {
-    delete window.OneSignalDeferred
-    delete window.OneSignal
+let mod
+
+beforeEach(async () => {
+  delete window.OneSignalDeferred
+  delete window.OneSignal
+  vi.resetModules()
+  mod = await import('@/utils/oneSignal')
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  delete window.OneSignalDeferred
+  delete window.OneSignal
+})
+
+function fakeSdk() {
+  return {
+    init: vi.fn().mockResolvedValue(undefined),
+    Notifications: { requestPermission: vi.fn() },
+    User: { PushSubscription: { optedIn: false, optIn: vi.fn(), id: null } }
+  }
+}
+
+describe('initOneSignal', () => {
+  it('push callback ke OneSignalDeferred', () => {
+    mod.initOneSignal()
+    expect(window.OneSignalDeferred.length).toBe(1)
   })
 
-  afterEach(() => {
-    delete window.OneSignalDeferred
-    delete window.OneSignal
+  it('callback: init dengan appId', async () => {
+    mod.initOneSignal()
+    const sdk = fakeSdk()
+    await window.OneSignalDeferred[0](sdk)
+    expect(sdk.init).toHaveBeenCalledWith({ appId: '42dc03c9-7413-4606-b900-c4deb7ad5ba5' })
   })
 
-  describe('initOneSignal', () => {
-    it('push callback ke OneSignalDeferred', () => {
-      initOneSignal()
-      expect(window.OneSignalDeferred.length).toBe(1)
-    })
+  it('tidak meminta izin notifikasi saat boot (butuh klik user)', async () => {
+    mod.initOneSignal()
+    const sdk = fakeSdk()
+    await window.OneSignalDeferred[0](sdk)
+    expect(sdk.User.PushSubscription.optIn).not.toHaveBeenCalled()
+    expect(sdk.Notifications.requestPermission).not.toHaveBeenCalled()
+  })
+})
 
-    it('callback: init dengan appId + optIn', async () => {
-      initOneSignal()
-      const cb = window.OneSignalDeferred[0]
-      const mock = {
-        init: vi.fn(),
-        User: { PushSubscription: { optedIn: false, optIn: vi.fn(), id: 'p-1' } }
-      }
-      await cb(mock)
-      expect(mock.init).toHaveBeenCalledWith({
-        appId: '42dc03c9-7413-4606-b900-c4deb7ad5ba5'
-      })
-      expect(mock.User.PushSubscription.optIn).toHaveBeenCalled()
-    })
-
-    it('skip optIn kalau sudah opted-in', async () => {
-      initOneSignal()
-      const cb = window.OneSignalDeferred[0]
-      const mock = {
-        init: vi.fn(),
-        User: { PushSubscription: { optedIn: true, optIn: vi.fn(), id: 'p-1' } }
-      }
-      await cb(mock)
-      expect(mock.User.PushSubscription.optIn).not.toHaveBeenCalled()
-    })
+describe('whenOneSignalReady', () => {
+  it('resolve dengan objek SDK setelah init selesai', async () => {
+    mod.initOneSignal()
+    const ready = mod.whenOneSignalReady()
+    const sdk = fakeSdk()
+    await window.OneSignalDeferred[0](sdk)
+    expect(await ready).toBe(sdk)
   })
 
-  describe('getPlayerId', () => {
-    it('SDK ready + punya ID → return langsung', async () => {
-      window.OneSignal = { User: { PushSubscription: { id: 'player-123' } } }
-      expect(await getPlayerId()).toBe('player-123')
-    })
-
-    it('SDK belum ready → pakai deferred', async () => {
-      const promise = getPlayerId()
-      const cb = window.OneSignalDeferred[0]
-      cb({ User: { PushSubscription: { id: 'player-456' } } })
-      expect(await promise).toBe('player-456')
-    })
-
-    it('timeout → return null', async () => {
-      vi.useFakeTimers()
-      const promise = getPlayerId()
-      vi.advanceTimersByTime(10000)
-      expect(await promise).toBeNull()
-      vi.useRealTimers()
-    })
+  it('init gagal → null', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mod.initOneSignal()
+    const ready = mod.whenOneSignalReady()
+    const sdk = fakeSdk()
+    sdk.init.mockRejectedValueOnce(new Error('Can only be used on: https://x'))
+    await window.OneSignalDeferred[0](sdk)
+    expect(await ready).toBeNull()
   })
 
-  describe('getCurrentPlayerId', () => {
-    it('SDK ready → return ID', () => {
-      window.OneSignal = { User: { PushSubscription: { id: 'p-sync' } } }
-      expect(getCurrentPlayerId()).toBe('p-sync')
-    })
+  it('SDK tidak pernah load (mis. diblok adblock) → null setelah timeout', async () => {
+    vi.useFakeTimers()
+    mod.initOneSignal()
+    const ready = mod.whenOneSignalReady(5000)
+    vi.advanceTimersByTime(5000)
+    expect(await ready).toBeNull()
+  })
 
-    it('SDK belum ready → null', () => {
-      expect(getCurrentPlayerId()).toBeNull()
-    })
+  it('initOneSignal belum dipanggil → null', async () => {
+    expect(await mod.whenOneSignalReady()).toBeNull()
+  })
+})
+
+describe('getCurrentPlayerId', () => {
+  it('SDK ready → return ID', () => {
+    window.OneSignal = { User: { PushSubscription: { id: 'p-sync' } } }
+    expect(mod.getCurrentPlayerId()).toBe('p-sync')
+  })
+
+  it('SDK belum ready → null', () => {
+    expect(mod.getCurrentPlayerId()).toBeNull()
   })
 })
