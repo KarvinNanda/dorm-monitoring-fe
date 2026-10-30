@@ -33,6 +33,7 @@ vi.mock('@/services/facilityReservationService', () => ({
 }))
 
 import FacilityPage from '@/modules/facility/views/FacilityPage.vue'
+import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { facilityService } from '@/services/facilityService'
 import { facilityReservationService } from '@/services/facilityReservationService'
 
@@ -81,6 +82,27 @@ describe('FacilityPage', () => {
     await facilityTab.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Aula utama')
+  })
+
+  it('hapus reservasi → dialog konfirmasi → Hapus → remove', async () => {
+    facilityReservationService.remove.mockResolvedValueOnce({})
+    const wrapper = mountWithConfirm(FacilityPage)
+    await flushPromises()
+    await wrapper.find('button[title="Hapus"]').trigger('click')
+    expect(await answerConfirm(wrapper, 'Hapus')).toContain('Rapat bulanan')
+    expect(facilityReservationService.remove).toHaveBeenCalledWith(10)
+    wrapper.unmount()
+  })
+
+  it('hapus fasilitas → dialog konfirmasi → Hapus → remove', async () => {
+    facilityService.remove.mockResolvedValueOnce({})
+    const wrapper = mountWithConfirm(FacilityPage)
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === 'Daftar Fasilitas').trigger('click')
+    await wrapper.find('button[title="Hapus"]').trigger('click')
+    expect(await answerConfirm(wrapper, 'Hapus')).toContain('Aula')
+    expect(facilityService.remove).toHaveBeenCalledWith(1)
+    wrapper.unmount()
   })
 
   it('quick-approve memanggil update dengan status APPROVED', async () => {

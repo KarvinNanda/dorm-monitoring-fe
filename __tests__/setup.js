@@ -4,6 +4,12 @@
 // - Reset localStorage dan semua mock di antara test supaya test isolated.
 import { beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { config } from '@vue/test-utils'
+
+// BaseModal di-Teleport ke <body>. Stub Teleport supaya isi modal tetap ada
+// di dalam wrapper dan bisa dicari dengan wrapper.find(). Test yang perlu
+// Teleport asli memakai `global: { stubs: { teleport: false } }`.
+config.global.stubs = { ...config.global.stubs, teleport: true }
 
 beforeEach(() => {
   setActivePinia(createPinia())

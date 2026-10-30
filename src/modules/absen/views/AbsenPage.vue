@@ -1,5 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { Clock, LogIn, LogOut, Plus, StickyNote } from 'lucide-vue-next'
+import AppToast from '@/components/AppToast.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { checkLogService } from '@/services/checkLogService'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
@@ -55,6 +59,14 @@ async function fetchMyStatus() {
 const lastType = computed(() => myStatus.value?.type || null)
 const canClockIn = computed(() => !lastType.value || lastType.value === 'OUT')
 const canClockOut = computed(() => lastType.value === 'IN')
+// Satu tombol yang mengikuti status, bukan dua tombol dengan satu disabled.
+const nextAction = computed(() => (canClockOut.value ? 'OUT' : 'IN'))
+const statusText = computed(() => {
+  if (loadingStatus.value) return 'Memuat status...'
+  if (lastType.value === 'IN') return 'Sedang Tap In'
+  if (lastType.value === 'OUT') return 'Sudah Tap Out'
+  return 'Belum pernah absen'
+})
 
 async function doClock(action) {
   clockLoading.value = true
@@ -322,12 +334,12 @@ function userNameFromEntry(entry) {
   )
 }
 
-function typeBadgeClass(t) {
-  return t === 'IN'
-    ? 'bg-green-100 text-green-700'
-    : t === 'OUT'
-      ? 'bg-amber-100 text-amber-700'
-      : 'bg-gray-100 text-gray-600'
+function typeChipClass(t) {
+  return t === 'IN' ? 'chip-brand' : t === 'OUT' ? 'chip-amber' : 'chip-gray'
+}
+
+function typeLabel(t) {
+  return t === 'IN' ? 'Tap In' : t === 'OUT' ? 'Tap Out' : '-'
 }
 
 // ============ MOUNT ============
@@ -342,490 +354,289 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <!-- Toast -->
-    <transition name="fade-up">
-      <div
-        v-if="toast.show"
-        class="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm"
-        :class="toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
-      >
-        {{ toast.message }}
-      </div>
-    </transition>
+  <div class="space-y-4">
+    <AppToast :toast="toast" />
 
-    <h1 class="text-xl font-bold text-gray-800 mb-3 fade-up">Absensi 🍃</h1>
-
-    <!-- ================= RESIDENT SECTION ================= -->
-    <div v-if="isResident" class="space-y-3">
-      <!-- Status Card (compact, 2-column) -->
-      <div
-        class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 fade-up card-lift"
-        style="animation-delay: 80ms"
-      >
-        <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center">
-          <!-- Left: status info -->
-          <div class="flex items-center gap-3 flex-wrap">
-            <div>
-              <p class="text-[11px] text-gray-400 uppercase tracking-wide">Hari ini</p>
-              <p class="text-sm font-semibold text-gray-800">{{ tanggalLengkap }}</p>
-            </div>
-            <span class="hidden md:inline text-gray-300">|</span>
-            <div>
-              <span
-                class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
-                :class="{
-                  'bg-gray-100 text-gray-600': !lastType,
-                  'bg-green-100 text-green-700': lastType === 'IN',
-                  'bg-amber-100 text-amber-700': lastType === 'OUT'
-                }"
-              >
-                <span v-if="loadingStatus">Memuat...</span>
-                <span v-else-if="!lastType">Belum pernah absen</span>
-                <span v-else-if="lastType === 'IN'">🟢 Sedang Tap In</span>
-                <span v-else>🟡 Sudah Tap Out</span>
-              </span>
-              <span v-if="myStatus?.time" class="block text-[11px] text-gray-400 mt-0.5">
-                Terakhir: {{ formatDate(myStatus.time) }}
-              </span>
-            </div>
+    <!-- ================= RESIDENT ================= -->
+    <template v-if="isResident">
+      <section class="card p-4 md:p-5" aria-labelledby="clock-status">
+        <div class="flex items-center gap-4">
+          <span
+            class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+            :class="lastType === 'IN' ? 'chip-brand' : lastType === 'OUT' ? 'chip-amber' : 'chip-gray'"
+          >
+            <LogIn v-if="lastType === 'IN'" class="w-6 h-6" aria-hidden="true" />
+            <LogOut v-else-if="lastType === 'OUT'" class="w-6 h-6" aria-hidden="true" />
+            <Clock v-else class="w-6 h-6" aria-hidden="true" />
+          </span>
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-ink-muted">{{ tanggalLengkap }}</p>
+            <p id="clock-status" class="text-base font-semibold text-ink" aria-live="polite">{{ statusText }}</p>
+            <p v-if="myStatus?.time" class="text-xs text-ink-muted">Terakhir: {{ formatDate(myStatus.time) }}</p>
           </div>
+        </div>
 
-          <!-- Right: controls -->
-          <div class="flex flex-col sm:flex-row gap-2">
+        <div class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div>
+            <label for="clock-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
             <input
+              id="clock-note"
               v-model="noteInput"
               type="text"
               maxlength="200"
-              placeholder="Catatan (opsional)"
-              class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary w-full sm:w-56"
+              autocomplete="off"
+              placeholder="Contoh: pulang ke rumah orang tua"
+              class="field"
             />
-            <div class="flex gap-2">
-              <button
-                @click="doClock('IN')"
-                :disabled="clockLoading || !canClockIn"
-                class="flex-1 sm:flex-none bg-primary text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {{ clockLoading ? '...' : 'Tap In' }}
-              </button>
-              <button
-                @click="doClock('OUT')"
-                :disabled="clockLoading || !canClockOut"
-                class="flex-1 sm:flex-none bg-secondary text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {{ clockLoading ? '...' : 'Tap Out' }}
-              </button>
-            </div>
           </div>
-        </div>
-      </div>
-
-      <!-- History -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 140ms">
-        <!-- Mobile: judul full-width di atas, lalu input grid 2 kolom + tombol full-width.
-             Desktop (sm+): kembali ke layout flex inline. -->
-        <div class="px-4 py-2.5 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-          <h2 class="col-span-2 font-semibold text-gray-800 text-sm sm:mr-auto sm:col-auto">Riwayat Absensi</h2>
-          <input v-model="myHistoryFrom" type="date" title="Dari" class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-          <input v-model="myHistoryTo" type="date" title="Sampai" class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-          <button @click="applyMyFilter" class="col-span-2 sm:col-auto w-full sm:w-auto px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-green-700">
-            Filter
+          <button
+            type="button"
+            class="btn btn-primary w-full sm:w-auto sm:min-w-[140px]"
+            :disabled="clockLoading || loadingStatus || (!canClockIn && !canClockOut)"
+            :aria-busy="clockLoading"
+            @click="doClock(nextAction)"
+          >
+            <LogOut v-if="nextAction === 'OUT'" class="w-4 h-4" aria-hidden="true" />
+            <LogIn v-else class="w-4 h-4" aria-hidden="true" />
+            {{ clockLoading ? 'Memproses...' : nextAction === 'OUT' ? 'Tap Out' : 'Tap In' }}
           </button>
         </div>
+      </section>
 
-        <!-- DESKTOP table -->
-        <div class="hidden md:block overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Waktu</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Tipe</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-if="loadingMyHistory">
-                <td colspan="3" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</td>
-              </tr>
-              <tr v-else-if="!myHistory.length">
-                <td colspan="3" class="px-4 py-6 text-center text-gray-400 text-sm">Belum ada riwayat.</td>
-              </tr>
-              <tr v-else v-for="row in myHistory" :key="row.id" class="hover:bg-gray-50">
-                <td class="px-4 py-1.5 text-gray-700 whitespace-nowrap">{{ formatDate(row.time) }}</td>
-                <td class="px-4 py-1.5 whitespace-nowrap">
-                  <span class="text-[11px] font-medium px-2 py-0.5 rounded-full" :class="typeBadgeClass(row.type)">
-                    {{ row.type }}
-                  </span>
-                </td>
-                <td class="px-4 py-1.5 text-gray-500">{{ row.note || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
+      <section class="card overflow-hidden" aria-labelledby="my-history-title">
+        <div class="p-4 border-b border-gray-200 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_auto_auto_auto] items-end">
+          <h2 id="my-history-title" class="col-span-2 sm:col-span-1 sm:self-center font-semibold text-ink">Riwayat Absensi</h2>
+          <div>
+            <label for="my-from" class="field-label text-xs">Dari tanggal</label>
+            <input id="my-from" v-model="myHistoryFrom" type="date" class="field" />
+          </div>
+          <div>
+            <label for="my-to" class="field-label text-xs">Sampai tanggal</label>
+            <input id="my-to" v-model="myHistoryTo" type="date" class="field" />
+          </div>
+          <button type="button" class="btn btn-secondary col-span-2 sm:col-span-1" @click="applyMyFilter">Terapkan</button>
         </div>
 
-        <!-- MOBILE card list -->
-        <div class="md:hidden">
-          <div v-if="loadingMyHistory" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-          <div v-else-if="!myHistory.length" class="px-4 py-6 text-center text-gray-400 text-sm">Belum ada riwayat.</div>
-          <ul v-else class="divide-y divide-gray-200">
-            <li v-for="row in myHistory" :key="row.id" class="px-4 py-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0 flex-1">
-                  <div class="text-xs text-gray-700">{{ formatDate(row.time) }}</div>
-                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
-                </div>
-                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
-                  {{ row.type }}
-                </span>
+        <div v-if="loadingMyHistory" class="empty-state" aria-busy="true">Memuat...</div>
+        <div v-else-if="!myHistory.length" class="empty-state">Belum ada riwayat.</div>
+        <template v-else>
+          <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-ink-muted">
+                <tr>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Waktu</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Tipe</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Catatan</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="row in myHistory" :key="row.id" class="hover:bg-gray-50">
+                  <td class="px-4 py-2 text-ink whitespace-nowrap tabular-nums">{{ formatDate(row.time) }}</td>
+                  <td class="px-4 py-2"><span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span></td>
+                  <td class="px-4 py-2 text-ink-muted">{{ row.note || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="md:hidden divide-y divide-gray-200">
+            <li v-for="row in myHistory" :key="row.id" class="p-4">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm text-ink tabular-nums">{{ formatDate(row.time) }}</span>
+                <span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span>
               </div>
+              <p v-if="row.note" class="mt-1.5 flex items-start gap-1.5 text-sm text-ink-muted">
+                <StickyNote class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                <span class="line-clamp-2">{{ row.note }}</span>
+              </p>
             </li>
           </ul>
-        </div>
+          <PaginationBar v-model:page="myHistoryPage" :total-pages="myHistoryTotalPages" />
+        </template>
+      </section>
+    </template>
 
-        <div
-          v-if="!loadingMyHistory && myHistory.length"
-          class="flex items-center justify-between px-4 py-2 border-t border-gray-200 text-xs text-gray-500"
-        >
-          <div>Hal {{ myHistoryPage }} / {{ myHistoryTotalPages }}</div>
-          <div class="flex gap-1">
-            <button :disabled="myHistoryPage <= 1" @click="myHistoryPage--" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹</button>
-            <button :disabled="myHistoryPage >= myHistoryTotalPages" @click="myHistoryPage++" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">›</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ================= ADMIN SECTION ================= -->
-    <div v-if="isAdmin" class="fade-up" style="animation-delay: 100ms">
-      <!-- Tabs -->
-      <div class="border-b border-gray-200 mb-3">
-        <nav class="flex gap-4 flex-wrap items-center">
-          <button
-            @click="adminTab = 'latest'"
-            class="py-2 text-sm font-medium border-b-2 transition-colors"
-            :class="adminTab === 'latest' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          >
+    <!-- ================= ADMIN ================= -->
+    <template v-if="isAdmin">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="tabs grid grid-cols-2 w-full sm:w-auto sm:inline-flex" role="tablist" aria-label="Tampilan absensi">
+          <button type="button" role="tab" class="tab" :aria-selected="adminTab === 'latest'" @click="adminTab = 'latest'">
             Status Terkini
           </button>
-          <button
-            @click="adminTab = 'history'"
-            class="py-2 text-sm font-medium border-b-2 transition-colors"
-            :class="adminTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          >
+          <button type="button" role="tab" class="tab" :aria-selected="adminTab === 'history'" @click="adminTab = 'history'">
             Riwayat per User
           </button>
-          <button
-            @click="openManual"
-            class="ml-auto my-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-green-700"
-          >
-            + Absensi Manual
-          </button>
-        </nav>
+        </div>
+        <button type="button" class="btn btn-primary" @click="openManual">
+          <Plus class="w-4 h-4" aria-hidden="true" />
+          Absensi Manual
+        </button>
       </div>
 
-      <!-- TAB: LATEST -->
-      <div v-if="adminTab === 'latest'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-gray-200 flex flex-wrap gap-2 items-center">
-          <span class="text-xs text-gray-500 shrink-0">Filter Tipe:</span>
-          <select
-            v-model="latestType"
-            class="flex-1 sm:flex-initial min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="">Semua</option>
-            <option value="IN">IN</option>
-            <option value="OUT">OUT</option>
-          </select>
-        </div>
-
-        <!-- DESKTOP table -->
-        <div class="hidden md:block overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Waktu</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-if="loadingLatest">
-                <td colspan="4" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</td>
-              </tr>
-              <tr v-else-if="!latestList.length">
-                <td colspan="4" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada data.</td>
-              </tr>
-              <tr v-else v-for="row in latestList" :key="row.id || row.userId" class="hover:bg-gray-50">
-                <td class="px-4 py-1.5 text-gray-800 font-medium whitespace-nowrap">{{ userNameFromEntry(row) }}</td>
-                <td class="px-4 py-1.5 whitespace-nowrap">
-                  <span class="text-[11px] font-medium px-2 py-0.5 rounded-full" :class="typeBadgeClass(row.type)">
-                    {{ row.type || '—' }}
-                  </span>
-                </td>
-                <td class="px-4 py-1.5 text-gray-500 whitespace-nowrap">{{ formatDate(row.time) }}</td>
-                <td class="px-4 py-1.5 text-gray-500">{{ row.note || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MOBILE card list -->
-        <div class="md:hidden">
-          <div v-if="loadingLatest" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-          <div v-else-if="!latestList.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada data.</div>
-          <ul v-else class="divide-y divide-gray-200">
-            <li v-for="row in latestList" :key="row.id || row.userId" class="px-4 py-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0 flex-1">
-                  <div class="text-sm font-semibold text-gray-800 truncate">{{ userNameFromEntry(row) }}</div>
-                  <div class="mt-0.5 text-xs text-gray-500">{{ formatDate(row.time) }}</div>
-                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
-                </div>
-                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
-                  {{ row.type || '—' }}
-                </span>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <div
-          v-if="!loadingLatest && latestList.length"
-          class="flex items-center justify-between px-4 py-2 border-t border-gray-200 text-xs text-gray-500"
-        >
-          <div>Hal {{ latestPage }} / {{ latestTotalPages }}</div>
-          <div class="flex gap-1">
-            <button :disabled="latestPage <= 1" @click="latestPage--" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹</button>
-            <button :disabled="latestPage >= latestTotalPages" @click="latestPage++" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">›</button>
+      <!-- TAB: STATUS TERKINI -->
+      <section v-if="adminTab === 'latest'" class="card overflow-hidden" aria-label="Status terkini">
+        <div class="p-4 border-b border-gray-200 sm:flex sm:items-end sm:gap-3">
+          <div class="sm:w-48">
+            <label for="latest-type" class="field-label text-xs">Tipe</label>
+            <select id="latest-type" v-model="latestType" class="field">
+              <option value="">Semua</option>
+              <option value="IN">Tap In</option>
+              <option value="OUT">Tap Out</option>
+            </select>
           </div>
         </div>
-      </div>
 
-      <!-- TAB: HISTORY PER USER -->
-      <div v-if="adminTab === 'history'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-          <select
-            v-model="selectedUserId"
-            class="col-span-2 sm:col-auto w-full sm:w-auto px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary sm:min-w-[180px]"
-          >
-            <option value="">Pilih user</option>
-            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-          </select>
-          <input v-model="userHistoryFrom" type="date" title="Dari" class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-          <input v-model="userHistoryTo" type="date" title="Sampai" class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
+        <div v-if="loadingLatest" class="empty-state" aria-busy="true">Memuat...</div>
+        <div v-else-if="!latestList.length" class="empty-state">Tidak ada data.</div>
+        <template v-else>
+          <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-ink-muted">
+                <tr>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Nama</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Status</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Waktu</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Catatan</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="row in latestList" :key="row.id || row.userId" class="hover:bg-gray-50">
+                  <td class="px-4 py-2 font-medium text-ink whitespace-nowrap">{{ userNameFromEntry(row) }}</td>
+                  <td class="px-4 py-2"><span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span></td>
+                  <td class="px-4 py-2 text-ink-muted whitespace-nowrap tabular-nums">{{ formatDate(row.time) }}</td>
+                  <td class="px-4 py-2 text-ink-muted">{{ row.note || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="md:hidden divide-y divide-gray-200">
+            <li v-for="row in latestList" :key="row.id || row.userId" class="p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="font-semibold text-ink truncate">{{ userNameFromEntry(row) }}</p>
+                  <p class="text-sm text-ink-muted tabular-nums">{{ formatDate(row.time) }}</p>
+                </div>
+                <span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span>
+              </div>
+              <p v-if="row.note" class="mt-1.5 flex items-start gap-1.5 text-sm text-ink-muted">
+                <StickyNote class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                <span class="line-clamp-2">{{ row.note }}</span>
+              </p>
+            </li>
+          </ul>
+          <PaginationBar v-model:page="latestPage" :total-pages="latestTotalPages" />
+        </template>
+      </section>
+
+      <!-- TAB: RIWAYAT PER USER -->
+      <section v-if="adminTab === 'history'" class="card overflow-hidden" aria-label="Riwayat per user">
+        <div class="p-4 border-b border-gray-200 grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end">
+          <div class="col-span-2 sm:col-span-1">
+            <label for="history-user" class="field-label text-xs">User</label>
+            <select id="history-user" v-model="selectedUserId" class="field">
+              <option value="">Pilih user</option>
+              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label for="history-from" class="field-label text-xs">Dari tanggal</label>
+            <input id="history-from" v-model="userHistoryFrom" type="date" class="field" />
+          </div>
+          <div>
+            <label for="history-to" class="field-label text-xs">Sampai tanggal</label>
+            <input id="history-to" v-model="userHistoryTo" type="date" class="field" />
+          </div>
           <button
-            @click="applyUserFilter"
+            type="button"
+            class="btn btn-secondary col-span-2 sm:col-span-1"
             :disabled="!selectedUserId"
-            class="col-span-2 sm:col-auto w-full sm:w-auto px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50"
-          >
-            Filter
-          </button>
+            @click="applyUserFilter"
+          >Terapkan</button>
         </div>
 
-        <!-- DESKTOP table -->
-        <div class="hidden md:block overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Waktu</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Tipe</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-                <th class="text-left px-4 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide">Diproses</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-if="!selectedUserId">
-                <td colspan="4" class="px-4 py-6 text-center text-gray-400 text-sm">Pilih user untuk melihat riwayat.</td>
-              </tr>
-              <tr v-else-if="loadingUserHistory">
-                <td colspan="4" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</td>
-              </tr>
-              <tr v-else-if="!userHistory.length">
-                <td colspan="4" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada riwayat pada periode ini.</td>
-              </tr>
-              <tr v-else v-for="row in userHistory" :key="row.id" class="hover:bg-gray-50">
-                <td class="px-4 py-1.5 text-gray-700 whitespace-nowrap">{{ formatDate(row.time) }}</td>
-                <td class="px-4 py-1.5 whitespace-nowrap">
-                  <span class="text-[11px] font-medium px-2 py-0.5 rounded-full" :class="typeBadgeClass(row.type)">
-                    {{ row.type }}
-                  </span>
-                </td>
-                <td class="px-4 py-1.5 text-gray-500">{{ row.note || '-' }}</td>
-                <td class="px-4 py-1.5 text-gray-500">{{ row.processor?.name || row.processedBy?.name || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MOBILE card list -->
-        <div class="md:hidden">
-          <div v-if="!selectedUserId" class="px-4 py-6 text-center text-gray-400 text-sm">Pilih user untuk melihat riwayat.</div>
-          <div v-else-if="loadingUserHistory" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-          <div v-else-if="!userHistory.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada riwayat pada periode ini.</div>
-          <ul v-else class="divide-y divide-gray-200">
-            <li v-for="row in userHistory" :key="row.id" class="px-4 py-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0 flex-1">
-                  <div class="text-xs text-gray-700">{{ formatDate(row.time) }}</div>
-                  <div v-if="row.note" class="mt-1 text-xs text-gray-500 line-clamp-2">📝 {{ row.note }}</div>
-                  <div class="mt-1 text-[11px] text-gray-400">Diproses: {{ row.processor?.name || row.processedBy?.name || '-' }}</div>
-                </div>
-                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="typeBadgeClass(row.type)">
-                  {{ row.type }}
-                </span>
+        <div v-if="!selectedUserId" class="empty-state">Pilih user untuk melihat riwayat.</div>
+        <div v-else-if="loadingUserHistory" class="empty-state" aria-busy="true">Memuat...</div>
+        <div v-else-if="!userHistory.length" class="empty-state">Tidak ada riwayat pada periode ini.</div>
+        <template v-else>
+          <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-ink-muted">
+                <tr>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Waktu</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Tipe</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Catatan</th>
+                  <th scope="col" class="text-left font-medium px-4 py-2.5">Diproses oleh</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="row in userHistory" :key="row.id" class="hover:bg-gray-50">
+                  <td class="px-4 py-2 text-ink whitespace-nowrap tabular-nums">{{ formatDate(row.time) }}</td>
+                  <td class="px-4 py-2"><span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span></td>
+                  <td class="px-4 py-2 text-ink-muted">{{ row.note || '-' }}</td>
+                  <td class="px-4 py-2 text-ink-muted">{{ row.processor?.name || row.processedBy?.name || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="md:hidden divide-y divide-gray-200">
+            <li v-for="row in userHistory" :key="row.id" class="p-4">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm text-ink tabular-nums">{{ formatDate(row.time) }}</span>
+                <span class="chip" :class="typeChipClass(row.type)">{{ typeLabel(row.type) }}</span>
               </div>
+              <p v-if="row.note" class="mt-1.5 flex items-start gap-1.5 text-sm text-ink-muted">
+                <StickyNote class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                <span class="line-clamp-2">{{ row.note }}</span>
+              </p>
+              <p class="mt-1 text-xs text-ink-muted">Diproses oleh: {{ row.processor?.name || row.processedBy?.name || '-' }}</p>
             </li>
           </ul>
-        </div>
+          <PaginationBar v-model:page="userHistoryPage" :total-pages="userHistoryTotalPages" />
+        </template>
+      </section>
 
-        <div
-          v-if="selectedUserId && !loadingUserHistory && userHistory.length"
-          class="flex items-center justify-between px-4 py-2 border-t border-gray-200 text-xs text-gray-500"
-        >
-          <div>Hal {{ userHistoryPage }} / {{ userHistoryTotalPages }}</div>
-          <div class="flex gap-1">
-            <button :disabled="userHistoryPage <= 1" @click="userHistoryPage--" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹</button>
-            <button :disabled="userHistoryPage >= userHistoryTotalPages" @click="userHistoryPage++" class="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">›</button>
+      <!-- Modal: Absensi Manual -->
+      <BaseModal v-model:open="showManualModal" title="Absensi Manual">
+        <form id="manual-form" class="space-y-4" @submit.prevent="submitManual">
+          <p v-if="manualError" class="form-error" role="alert">{{ manualError }}</p>
+          <div>
+            <label for="manual-user" class="field-label">User</label>
+            <select id="manual-user" v-model="manualForm.userId" required class="field">
+              <option value="" disabled>Pilih user</option>
+              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
           </div>
-        </div>
-      </div>
-
-      <!-- Modal: Manual Entry -->
-      <div
-        v-if="showManualModal"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
-        @click.self="showManualModal = false"
-      >
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-5">
-          <h3 class="text-base font-bold text-gray-800 mb-3">Absensi Manual</h3>
-          <form @submit.prevent="submitManual" class="space-y-3">
-            <div v-if="manualError" class="bg-red-50 text-red-600 text-xs p-2 rounded-lg">{{ manualError }}</div>
-
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">User</label>
-              <select
-                v-model="manualForm.userId"
-                required
-                class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-              >
-                <option value="" disabled>Pilih user</option>
-                <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-              </select>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">Tipe</label>
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    @click="manualForm.type = 'IN'"
-                    class="flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-                    :class="manualForm.type === 'IN' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'"
-                  >
-                    IN
-                  </button>
-                  <button
-                    type="button"
-                    @click="manualForm.type = 'OUT'"
-                    class="flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-                    :class="manualForm.type === 'OUT' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'"
-                  >
-                    OUT
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">Waktu</label>
-                <input
-                  v-model="manualForm.eventTime"
-                  type="datetime-local"
-                  required
-                  class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">Catatan (opsional)</label>
-              <textarea
-                v-model="manualForm.note"
-                rows="2"
-                class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-              ></textarea>
-            </div>
-
-            <div class="flex gap-2 pt-1">
-              <button
-                type="button"
-                @click="showManualModal = false"
-                class="flex-1 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-              >
-                Batal
+          <div>
+            <span id="manual-type-label" class="field-label">Tipe</span>
+            <div class="tabs grid grid-cols-2 w-full" role="group" aria-labelledby="manual-type-label">
+              <button type="button" class="tab" :aria-pressed="manualForm.type === 'IN'" @click="manualForm.type = 'IN'">
+                Tap In
               </button>
-              <button
-                type="submit"
-                :disabled="savingManual"
-                class="flex-1 bg-primary text-white py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-              >
-                {{ savingManual ? 'Menyimpan...' : 'Simpan' }}
+              <button type="button" class="tab" :aria-pressed="manualForm.type === 'OUT'" @click="manualForm.type = 'OUT'">
+                Tap Out
               </button>
             </div>
-          </form>
-        </div>
-      </div>
-    </div>
+          </div>
+          <div>
+            <label for="manual-time" class="field-label">Waktu</label>
+            <input id="manual-time" v-model="manualForm.eventTime" type="datetime-local" required class="field" />
+          </div>
+          <div>
+            <label for="manual-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
+            <textarea id="manual-note" v-model="manualForm.note" rows="2" class="field"></textarea>
+          </div>
+        </form>
+        <template #footer>
+          <button type="button" class="btn btn-secondary flex-1" @click="showManualModal = false">Batal</button>
+          <button type="submit" form="manual-form" class="btn btn-primary flex-1" :disabled="savingManual">
+            {{ savingManual ? 'Menyimpan...' : 'Simpan' }}
+          </button>
+        </template>
+      </BaseModal>
+    </template>
 
     <!-- Fallback -->
-    <div v-if="!isAdmin && !isResident" class="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-sm">
+    <div v-if="!isAdmin && !isResident" class="card p-6 text-center text-sm text-ink-muted">
       Halaman absensi hanya tersedia untuk role Resident atau Admin.
     </div>
   </div>
 </template>
-
-<style scoped>
-.fade-up {
-  opacity: 0;
-  transform: translateY(16px);
-  animation: fadeUp 0.5s ease forwards;
-}
-
-@keyframes fadeUp {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.card-lift {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.card-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px -8px rgba(46, 125, 50, 0.2);
-  border-color: #a5d6a7;
-}
-
-button {
-  transition: all 0.2s ease;
-}
-
-button:not(:disabled):hover {
-  transform: translateY(-1px);
-}
-
-button:not(:disabled):active {
-  transform: translateY(0);
-}
-
-.fade-up-enter-active,
-.fade-up-leave-active {
-  transition: all 0.25s ease;
-}
-.fade-up-enter-from,
-.fade-up-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-</style>

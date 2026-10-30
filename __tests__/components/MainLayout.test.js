@@ -40,6 +40,7 @@ import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
 import { notificationService } from '@/services/notificationService'
 import { useAuthStore } from '@/stores/authStore'
+import { confirmDialog } from '@/composables/useConfirm'
 
 const mountOpts = {
   global: {
@@ -181,6 +182,17 @@ describe('MainLayout — menu visibility per role', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('Lainnya')).trigger('click')
     const sheetLinks = wrapper.find('#more-sheet').findAll('a').map((a) => a.text())
     expect(sheetLinks).toEqual(['Profil Saya'])
+  })
+
+  it('host dialog konfirmasi terpasang: confirmDialog() dari halaman mana pun tampil di layout', async () => {
+    loginAs('admin')
+    const wrapper = mount(MainLayout, mountOpts)
+    const answer = confirmDialog({ title: 'Hapus item?', message: 'Item "Sapu" akan dihapus.' })
+    await flushPromises()
+    const dialog = wrapper.find('[role="alertdialog"]')
+    expect(dialog.text()).toContain('Item "Sapu" akan dihapus.')
+    await dialog.findAll('button').find((b) => b.text() === 'Batal').trigger('click')
+    await expect(answer).resolves.toBe(false)
   })
 
   it('judul halaman di header mengikuti route aktif', () => {

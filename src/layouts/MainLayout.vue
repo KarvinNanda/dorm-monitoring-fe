@@ -18,6 +18,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import logoUrl from '@/assets/logo-3.png'
@@ -284,6 +285,9 @@ async function handleLogout() {
         </div>
       </div>
     </transition>
+
+    <!-- Satu host untuk confirmDialog() dari halaman mana pun. -->
+    <ConfirmDialog />
   </div>
 </template>
 

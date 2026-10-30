@@ -56,6 +56,39 @@ describe('AbsenPage — resident', () => {
     expect(tapIn.element.disabled).toBe(false)
   })
 
+  it('hanya satu tombol aksi sesuai status: OUT → Tap In saja', async () => {
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    const labels = wrapper.findAll('button').map((b) => b.text())
+    expect(labels.some((t) => t.includes('Tap In'))).toBe(true)
+    expect(labels.some((t) => t.includes('Tap Out'))).toBe(false)
+  })
+
+  it('status terakhir IN → tombol Tap Out memanggil clockOut', async () => {
+    checkLogService.getMe.mockResolvedValue({ type: 'IN', time: '2026-04-29T01:00:00Z' })
+    checkLogService.clockOut.mockResolvedValueOnce({ id: 3, type: 'OUT', time: 'x' })
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    expect(wrapper.findAll('button').some((b) => b.text().includes('Tap In'))).toBe(false)
+    await wrapper.findAll('button').find((b) => b.text().includes('Tap Out')).trigger('click')
+    await flushPromises()
+    expect(checkLogService.clockOut).toHaveBeenCalled()
+  })
+
+  it('input catatan punya label yang terhubung', async () => {
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    const input = wrapper.find('input[type="text"]')
+    expect(wrapper.find(`label[for="${input.attributes('id')}"]`).exists()).toBe(true)
+  })
+
+  it('tidak punya h1 sendiri dan tanpa emoji', async () => {
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/\p{Extended_Pictographic}/u)
+  })
+
   it('clockIn dipanggil dengan note', async () => {
     checkLogService.clockIn.mockResolvedValueOnce({ id: 2, type: 'IN', time: 'x' })
     const wrapper = mount(AbsenPage)

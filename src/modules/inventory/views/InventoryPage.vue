@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { confirmDialog } from '@/composables/useConfirm'
 import { itemService } from '@/services/itemService'
 import { itemCategoryService } from '@/services/itemCategoryService'
 import { itemTransactionService } from '@/services/itemTransactionService'
@@ -149,7 +150,8 @@ async function saveItem() {
   }
 }
 async function removeItem(it) {
-  if (!confirm(`Hapus item "${it.name}"?`)) return
+  const ok = await confirmDialog({ title: 'Hapus item?', message: `Item "${it.name}" akan dihapus.` })
+  if (!ok) return
   try {
     await itemService.remove(it.id)
     showToast('Item dihapus')
@@ -291,7 +293,8 @@ async function saveCategory() {
   }
 }
 async function removeCategory(c) {
-  if (!confirm(`Hapus kategori "${c.name}"?`)) return
+  const ok = await confirmDialog({ title: 'Hapus kategori?', message: `Kategori "${c.name}" akan dihapus.` })
+  if (!ok) return
   try {
     await itemCategoryService.remove(c.id)
     showToast('Kategori dihapus')

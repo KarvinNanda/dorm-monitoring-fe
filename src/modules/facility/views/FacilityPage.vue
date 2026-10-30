@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { confirmDialog } from '@/composables/useConfirm'
 import { facilityService } from '@/services/facilityService'
 import { facilityReservationService } from '@/services/facilityReservationService'
 import { useAuthStore } from '@/stores/authStore'
@@ -149,7 +150,8 @@ async function saveFacility() {
   }
 }
 async function removeFacility(f) {
-  if (!confirm(`Hapus fasilitas "${f.name}"?`)) return
+  const ok = await confirmDialog({ title: 'Hapus fasilitas?', message: `Fasilitas "${f.name}" akan dihapus.` })
+  if (!ok) return
   try {
     await facilityService.remove(f.id)
     showToast('Fasilitas dihapus')
@@ -304,7 +306,8 @@ async function saveReservation() {
   }
 }
 async function removeReservation(r) {
-  if (!confirm(`Hapus reservasi "${r.title}"?`)) return
+  const ok = await confirmDialog({ title: 'Hapus reservasi?', message: `Reservasi "${r.title}" akan dihapus.` })
+  if (!ok) return
   try {
     await facilityReservationService.remove(r.id)
     showToast('Reservasi dihapus')
