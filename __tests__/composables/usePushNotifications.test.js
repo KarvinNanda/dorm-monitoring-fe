@@ -92,6 +92,32 @@ describe('usePushNotifications — start()', () => {
     expect(sdk.User.PushSubscription.optIn).toHaveBeenCalled()
   })
 
+  it('granted + optedIn tapi tanpa subscription id (blokir dibuka lewat setting situs) → requestPermission untuk membuat subscription', async () => {
+    const sdk = fakeSdk({ permission: 'granted', optedIn: true })
+    whenOneSignalReady.mockResolvedValue(sdk)
+    const push = usePushNotifications()
+    await push.start()
+    expect(sdk.Notifications.requestPermission).toHaveBeenCalledTimes(1)
+    expect(sdk.User.PushSubscription.optIn).not.toHaveBeenCalled()
+  })
+
+  it('sudah punya subscription id → tidak memanggil requestPermission', async () => {
+    const sdk = fakeSdk({ permission: 'granted', id: 'sub-1', optedIn: true })
+    whenOneSignalReady.mockResolvedValue(sdk)
+    const push = usePushNotifications()
+    await push.start()
+    expect(sdk.Notifications.requestPermission).not.toHaveBeenCalled()
+  })
+
+  it('granted tapi belum opt-in → optIn saja, tanpa requestPermission', async () => {
+    const sdk = fakeSdk({ permission: 'granted' })
+    whenOneSignalReady.mockResolvedValue(sdk)
+    const push = usePushNotifications()
+    await push.start()
+    expect(sdk.User.PushSubscription.optIn).toHaveBeenCalled()
+    expect(sdk.Notifications.requestPermission).not.toHaveBeenCalled()
+  })
+
   it('izin denied → status denied, tidak optIn', async () => {
     const sdk = fakeSdk({ permission: 'denied' })
     whenOneSignalReady.mockResolvedValue(sdk)

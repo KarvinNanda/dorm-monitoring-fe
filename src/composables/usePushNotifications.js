@@ -54,9 +54,16 @@ export function usePushNotifications() {
       status.value = 'unsupported'
       return
     }
-    sdk.User.PushSubscription.addEventListener('change', onSubscriptionChange)
+    const subscription = sdk.User.PushSubscription
+    subscription.addEventListener('change', onSubscriptionChange)
+    // Izin yang diberikan dari luar SDK (user membuka blokir lewat setting
+    // situs) membuat SDK melaporkan optedIn tanpa subscription, dan optIn()
+    // tidak memperbaikinya. requestPermission() membuat subscription-nya;
+    // browser tidak menampilkan prompt karena izin sudah granted.
+    const missingSubscription = subscription.optedIn && !subscription.id
     await optInIfGranted()
-    await register(sdk.User.PushSubscription)
+    if (status.value === 'granted' && missingSubscription) await sdk.Notifications.requestPermission()
+    await register(subscription)
   }
 
   async function enable() {
