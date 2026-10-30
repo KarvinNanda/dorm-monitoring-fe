@@ -112,4 +112,17 @@ describe('LoginPage', () => {
     await wrapper.find('button[aria-label="Sembunyikan kata sandi"]').trigger('click')
     expect(wrapper.find('#login-password').attributes('type')).toBe('password')
   })
+
+  it('header seperti desain sebelumnya: logo di tengah, judul Sistem Internal', () => {
+    const wrapper = mount(LoginPage)
+    expect(wrapper.find('h1').text()).toBe('Sistem Internal')
+    expect(wrapper.text()).toContain('Masuk ke akun Anda')
+    expect(wrapper.find('img').classes()).toContain('mx-auto')
+  })
+
+  it('input email polos tanpa ikon di dalam field', () => {
+    const wrapper = mount(LoginPage)
+    const email = wrapper.find('#login-email')
+    expect(email.element.parentElement.querySelector('svg')).toBeNull()
+  })
 })
