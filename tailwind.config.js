@@ -1,5 +1,14 @@
+// Colours that change between light and dark mode are CSS variables
+// (RGB channels, defined in src/style.css) so `bg-gray-50/80` style
+// opacity modifiers keep working.
+const themed = (name) => `rgb(var(--${name}) / <alpha-value>)`
+const scale = (name, steps) =>
+  Object.fromEntries(steps.map((s) => [s, themed(`${name}-${s}`)]))
+const STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{vue,js}"
@@ -10,26 +19,22 @@ export default {
         sans: ['Inter', 'sans-serif'],
       },
       colors: {
-        // Brand green scale. 600 is the original brand colour (#2E7D32):
-        // white text on 600 = 5.1:1, on 700 = 7:1 (WCAG AA for body text).
-        brand: {
-          50: '#F1F8F1',
-          100: '#DCEFDD',
-          200: '#B9DFBB',
-          300: '#8CC98F',
-          400: '#5DAF62',
-          500: '#3E9444',
-          600: '#2E7D32',
-          700: '#256328',
-          800: '#1E4F21',
-          900: '#173D1A',
-        },
-        // Page background: white with a faint green tint, cards stay pure white.
-        surface: '#F6FAF6',
-        // Text colours: ink for body, ink-muted for secondary text (5.7:1 on white).
+        // Brand green scale. 500/600 are the same in both modes (buttons,
+        // focus ring); tints (50-300) and text shades (700-900) flip in dark.
+        // White text on 600 = 5.1:1.
+        brand: scale('brand', STEPS),
+        // Neutral scale used heavily by pages not yet revamped. Inverted in
+        // dark mode so text-gray-800 becomes light text, bg-gray-50 a dark panel.
+        gray: scale('gray', STEPS),
+        // Fixed dark green: button hover and the login brand panel.
+        // White text on it = 7.3:1 in both modes.
+        forest: '#256328',
+        surface: themed('surface'),
+        card: themed('card'),
+        // Text: ink for body, ink-muted for secondary (>= 5.3:1 in both modes).
         ink: {
-          DEFAULT: '#1C2B1E',
-          muted: '#5B6B5D',
+          DEFAULT: themed('ink'),
+          muted: themed('ink-muted'),
         },
         // Legacy aliases still used by pages not yet revamped.
         primary: "#2E7D32",

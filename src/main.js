@@ -4,6 +4,9 @@ import router from './router'
 import App from './App.vue'
 import './style.css'
 import { initOneSignal } from './utils/oneSignal'
+import { initTheme } from './utils/theme'
+
+initTheme()
 
 const app = createApp(App)
 app.use(createPinia())

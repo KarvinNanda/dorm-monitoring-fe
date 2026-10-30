@@ -1,4 +1,5 @@
 <script setup>
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
@@ -568,13 +569,13 @@ function toggleRoleId(id, listRef) {
           </div>
           <div v-if="!editingUser">
             <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
+            <PasswordInput
               v-model="form.password"
-              type="password"
               minlength="8"
+              autocomplete="new-password"
               required
               placeholder="Minimal 8 karakter"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div v-if="!editingUser && roles.length">
@@ -630,12 +631,12 @@ function toggleRoleId(id, listRef) {
           <div v-if="passwordError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ passwordError }}</div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Password Baru</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.newPassword"
-              type="password"
               minlength="8"
+              autocomplete="new-password"
               required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div class="flex gap-3 pt-2">

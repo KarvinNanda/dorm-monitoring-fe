@@ -2,6 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme colours as RGB channels, consumed by tailwind.config.js. */
+:root {
+  color-scheme: light;
+
+  --surface: 246 250 246;
+  --card: 255 255 255;
+  --ink: 28 43 30;
+  --ink-muted: 91 107 93;
+
+  --brand-50: 241 248 241;
+  --brand-100: 220 239 221;
+  --brand-200: 185 223 187;
+  --brand-300: 140 201 143;
+  --brand-400: 93 175 98;
+  --brand-500: 62 148 68;
+  --brand-600: 46 125 50;
+  --brand-700: 37 99 40;
+  --brand-800: 30 79 33;
+  --brand-900: 23 61 26;
+
+  --gray-50: 249 250 251;
+  --gray-100: 243 244 246;
+  --gray-200: 229 231 235;
+  --gray-300: 209 213 219;
+  --gray-400: 156 163 175;
+  --gray-500: 107 114 128;
+  --gray-600: 75 85 99;
+  --gray-700: 55 65 81;
+  --gray-800: 31 41 55;
+  --gray-900: 17 24 39;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface: 14 20 16;
+  --card: 22 30 24;
+  --ink: 228 236 229;
+  --ink-muted: 163 177 165;
+
+  --brand-50: 21 38 26;
+  --brand-100: 27 51 33;
+  --brand-200: 36 69 43;
+  --brand-300: 58 107 66;
+  --brand-400: 93 175 98;
+  --brand-500: 62 148 68;
+  --brand-600: 46 125 50;
+  --brand-700: 147 208 151;
+  --brand-800: 189 227 191;
+  --brand-900: 221 240 222;
+
+  --gray-50: 27 35 29;
+  --gray-100: 33 43 35;
+  --gray-200: 43 54 45;
+  --gray-300: 58 71 60;
+  --gray-400: 111 125 113;
+  --gray-500: 157 170 159;
+  --gray-600: 181 193 183;
+  --gray-700: 202 212 204;
+  --gray-800: 225 232 226;
+  --gray-900: 240 244 241;
+}
+
+/* Pages not yet revamped use bg-white for cards and modals. `white` itself
+   stays white (text-white on green buttons must not flip), so only the
+   background utility is redirected to the card colour in dark mode. */
+.dark .bg-white {
+  background-color: rgb(var(--card));
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
@@ -13,13 +83,13 @@
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-card;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl border border-brand-100 shadow-card;
+    @apply bg-card rounded-2xl border border-brand-100 shadow-card;
   }
 
   .pressable {

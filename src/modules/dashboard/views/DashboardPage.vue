@@ -115,9 +115,9 @@ const hasAnyPanel = computed(
 // Kartu statistik ringkas — urutan tampil mengikuti urutan array.
 const tones = {
   brand: 'bg-brand-50 text-brand-700',
-  amber: 'bg-amber-50 text-amber-700',
+  amber: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
   gray: 'bg-gray-100 text-gray-600',
-  sky: 'bg-sky-50 text-sky-700'
+  sky: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
 }
 const statTiles = computed(() => {
   const tiles = []
@@ -153,13 +153,13 @@ const statTiles = computed(() => {
     <div
       v-else-if="errorMessage"
       role="alert"
-      class="flex items-start gap-3 bg-red-50 border border-red-100 text-red-700 rounded-2xl p-4 text-sm"
+      class="flex items-start gap-3 bg-red-50 border border-red-100 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-300 rounded-2xl p-4 text-sm"
     >
       <CircleAlert class="w-5 h-5 shrink-0" aria-hidden="true" />
       <span class="flex-1">{{ errorMessage }}</span>
       <button
         @click="fetchDashboard"
-        class="flex items-center gap-1.5 h-9 px-3 -my-1 rounded-lg bg-white border border-red-200 text-red-700 text-xs font-medium shrink-0 hover:bg-red-100"
+        class="flex items-center gap-1.5 h-9 px-3 -my-1 rounded-lg bg-card border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300 text-xs font-medium shrink-0 hover:bg-red-100 dark:hover:bg-red-500/10"
       >
         <RefreshCw class="w-3.5 h-3.5" aria-hidden="true" />
         Coba lagi

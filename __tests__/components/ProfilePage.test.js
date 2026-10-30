@@ -117,6 +117,15 @@ describe('ProfilePage', () => {
     expect(authService.resetPassword).toHaveBeenCalledWith('current123', 'newpass12')
   })
 
+  it('modal ganti password: ketiga field punya tombol mata', async () => {
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await wrapper.find('button.bg-amber-50').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('input[type="password"]').length).toBe(3)
+    expect(wrapper.findAll('button[aria-label="Tampilkan kata sandi"]').length).toBe(3)
+  })
+
   it('fetch profile error → tombol "Coba lagi" tampil', async () => {
     authService.me.mockReset()
     authService.me.mockRejectedValueOnce({

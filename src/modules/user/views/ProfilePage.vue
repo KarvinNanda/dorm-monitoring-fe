@@ -1,4 +1,5 @@
 <script setup>
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, onMounted } from 'vue'
 import { authService } from '@/services/authService'
 import { userService } from '@/services/userService'
@@ -247,31 +248,31 @@ async function submitPassword() {
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Password Saat Ini</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.currentPassword"
-              type="password"
               required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              autocomplete="current-password"
+              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Password Baru</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.newPassword"
-              type="password"
               minlength="8"
+              autocomplete="new-password"
               required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Konfirmasi Password Baru</label>
-            <input
+            <PasswordInput
               v-model="passwordForm.confirmPassword"
-              type="password"
               minlength="8"
+              autocomplete="new-password"
               required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
             />
           </div>
 
