@@ -296,6 +296,32 @@ describe('MainLayout — izin notifikasi push', () => {
     expect(second.text()).not.toContain('Notifikasi diblokir')
   })
 
+  it('iPhone di luar Layar Utama → petunjuk Tambah ke Layar Utama, bisa ditutup permanen', async () => {
+    const ua = navigator.userAgent
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1',
+      configurable: true
+    })
+    try {
+      loginAs('admin')
+      const sdk = fakeSdk()
+      sdk.Notifications.isPushSupported = () => false
+      whenOneSignalReady.mockResolvedValue(sdk)
+      const first = mount(MainLayout, mountOpts)
+      await flushPromises()
+      expect(first.text()).toContain('Layar Utama')
+      await findBtn(first, 'Tutup').trigger('click')
+      expect(first.text()).not.toContain('Layar Utama')
+      first.unmount()
+
+      const second = mount(MainLayout, mountOpts)
+      await flushPromises()
+      expect(second.text()).not.toContain('Layar Utama')
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+    }
+  })
+
   it('sudah subscribe → daftar device saat layout dibuka, tanpa banner', async () => {
     loginAs('admin')
     whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'granted', id: 'sub-9', optedIn: true }))

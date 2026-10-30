@@ -8,11 +8,23 @@
  *   memblokir prompt tanpa user gesture.
  * - stop(): lepas listener saat layout unmount (logout).
  *
- * status: 'unknown' | 'unsupported' | 'default' | 'granted' | 'denied'
+ * status: 'unknown' | 'unsupported' | 'needs-home-screen' | 'default' | 'granted' | 'denied'
  */
 import { ref } from 'vue'
 import { whenOneSignalReady } from '@/utils/oneSignal'
 import { userDeviceService } from '@/services/userDeviceService'
+
+// iOS (16.4+) hanya mendukung web push untuk situs yang dibuka dari Layar Utama.
+// iPadOS melaporkan diri sebagai MacIntel, jadi dikenali dari layar sentuhnya.
+function needsHomeScreen() {
+  if (typeof navigator === 'undefined') return false
+  const ios =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const standalone =
+    navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches
+  return ios && !standalone
+}
 
 export function usePushNotifications() {
   const status = ref('unknown')
@@ -53,7 +65,7 @@ export function usePushNotifications() {
     if (!sdk || !sdk.Notifications.isPushSupported()) {
       console.info('[OneSignal] Push tidak tersedia:', sdk ? 'browser tidak mendukung' : 'SDK gagal load/init')
       sdk = null
-      status.value = 'unsupported'
+      status.value = needsHomeScreen() ? 'needs-home-screen' : 'unsupported'
       return
     }
     const subscription = sdk.User.PushSubscription

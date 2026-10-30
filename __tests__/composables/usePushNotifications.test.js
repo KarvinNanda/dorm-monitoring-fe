@@ -3,7 +3,7 @@
  * dan daftar subscription ke backend (/user-device) setiap kali subscription
  * siap — saat app dibuka atau saat user baru saja menekan Allow.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 
 vi.mock('@/utils/oneSignal', () => ({ whenOneSignalReady: vi.fn() }))
@@ -245,5 +245,40 @@ describe('usePushNotifications — log debug di console', () => {
     whenOneSignalReady.mockResolvedValue(null)
     await usePushNotifications().start()
     expect(infoLines().some((l) => l.includes('[OneSignal]') && l.includes('tidak tersedia'))).toBe(true)
+  })
+})
+
+describe('usePushNotifications — iPhone di luar Layar Utama', () => {
+  const ua = navigator.userAgent
+  const setUA = (value) => Object.defineProperty(navigator, 'userAgent', { value, configurable: true })
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
+
+  afterEach(() => {
+    setUA(ua)
+    delete navigator.standalone
+  })
+
+  it('iPhone, dibuka di Safari biasa, push tidak tersedia → status needs-home-screen', async () => {
+    setUA(IPHONE)
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ supported: false }))
+    const push = usePushNotifications()
+    await push.start()
+    expect(push.status.value).toBe('needs-home-screen')
+  })
+
+  it('iPhone, sudah dibuka dari Layar Utama tapi push tetap tidak tersedia → unsupported', async () => {
+    setUA(IPHONE)
+    Object.defineProperty(navigator, 'standalone', { value: true, configurable: true })
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ supported: false }))
+    const push = usePushNotifications()
+    await push.start()
+    expect(push.status.value).toBe('unsupported')
+  })
+
+  it('bukan iOS → tetap unsupported', async () => {
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ supported: false }))
+    const push = usePushNotifications()
+    await push.start()
+    expect(push.status.value).toBe('unsupported')
   })
 })
