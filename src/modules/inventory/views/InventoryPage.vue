@@ -1,5 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { ArrowUpDown, Pencil, Plus, SlidersHorizontal, StickyNote, Tag, Trash2 } from 'lucide-vue-next'
+import AppToast from '@/components/AppToast.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { confirmDialog } from '@/composables/useConfirm'
 import { itemService } from '@/services/itemService'
 import { itemCategoryService } from '@/services/itemCategoryService'
@@ -32,6 +36,8 @@ function extractError(err, fallback = 'Terjadi kesalahan') {
 
 // ============ TABS ============
 const activeTab = ref('items') // items | categories | transactions
+// Mobile: filter transaksi disembunyikan di balik tombol supaya daftar langsung terlihat.
+const showTxFilters = ref(false)
 
 // ============ ITEMS ============
 const items = ref([])
@@ -176,8 +182,8 @@ function openTxModal(it) {
 async function saveTx() {
   txFormError.value = ''
   if (!txTargetItem.value) return
-  if (txForm.value.qty == null || txForm.value.qty < 0) {
-    txFormError.value = 'Qty harus >= 0'
+  if (txForm.value.qty == null || txForm.value.qty === '' || txForm.value.qty < 0) {
+    txFormError.value = 'Jumlah tidak boleh kosong atau negatif'
     return
   }
   savingTx.value = true
@@ -249,6 +255,9 @@ async function fetchAllCategoriesForSelect() {
 }
 function categoryNameById(id) {
   return allCategories.value.find((c) => String(c.id) === String(id))?.name || '-'
+}
+function resolvedCategoryName(it) {
+  return it.category?.name || categoryNameById(it.categoryId)
 }
 
 // ============ CATEGORY FORM ============
@@ -368,18 +377,27 @@ function itemNameById(id) {
   return allItems.value.find((i) => String(i.id) === String(id))?.name || `#${id}`
 }
 
-function txTypeBadge(t) {
-  switch ((t || '').toUpperCase()) {
-    case 'ADD':
-      return 'bg-green-100 text-green-700'
-    case 'MINUS':
-      return 'bg-red-100 text-red-700'
-    case 'ADJUST':
-      return 'bg-yellow-100 text-yellow-800'
-    default:
-      return 'bg-gray-100 text-gray-600'
-  }
+// Nilai enum dari API tetap dikirim apa adanya; yang diterjemahkan hanya label.
+const TX_TYPES = [
+  { value: 'ADD', label: 'Tambah', cls: 'chip-brand', hint: 'Jumlah yang ditambahkan ke stok.' },
+  { value: 'MINUS', label: 'Kurangi', cls: 'chip-red', hint: 'Jumlah yang dikurangi dari stok.' },
+  { value: 'ADJUST', label: 'Penyesuaian', cls: 'chip-amber', hint: 'Stok diubah menjadi jumlah ini (mis. setelah hitung ulang).' }
+]
+
+function txTypeInfo(t) {
+  return TX_TYPES.find((x) => x.value === (t || '').toUpperCase()) || { label: t || '-', cls: 'chip-gray' }
 }
+
+// changeQty dari backend: selisih stok. Tanda +/− supaya arah perubahan jelas.
+function txChangeLabel(t) {
+  const n = Number(t.changeQty ?? 0)
+  const type = (t.type || '').toUpperCase()
+  if (type === 'MINUS') return `−${Math.abs(n)}`
+  if (type === 'ADD') return `+${Math.abs(n)}`
+  return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0'
+}
+
+const txHint = computed(() => txTypeInfo(txForm.value.type).hint)
 
 // ============ MOUNT ============
 onMounted(async () => {
@@ -398,390 +416,418 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <transition name="fade-up">
+  <div class="space-y-4">
+    <AppToast :toast="toast" />
+
+    <!-- Toolbar: tab + aksi utama. Judul halaman sudah ada di header layout. -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div
-        v-if="toast.show"
-        class="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm"
-        :class="toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
+        class="tabs grid w-full sm:w-auto sm:inline-flex"
+        :class="canViewTransactions ? 'grid-cols-3' : 'grid-cols-2'"
+        role="tablist"
+        aria-label="Bagian halaman inventaris"
       >
-        {{ toast.message }}
-      </div>
-    </transition>
-
-    <div class="flex items-center justify-between mb-3 flex-wrap gap-3 fade-up">
-      <h1 class="text-xl font-bold text-gray-800">Inventaris 📦</h1>
-      <button
-        v-if="activeTab === 'items' && canWriteItem"
-        @click="openCreateItem"
-        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-      >
-        + Tambah Item
-      </button>
-      <button
-        v-else-if="activeTab === 'categories' && canWriteCategory"
-        @click="openCreateCategory"
-        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-      >
-        + Tambah Kategori
-      </button>
-    </div>
-
-    <div class="border-b border-gray-200 mb-3 fade-up" style="animation-delay: 80ms">
-      <nav class="flex gap-6 overflow-x-auto">
-        <button
-          @click="activeTab = 'items'"
-          class="py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-          :class="activeTab === 'items' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
-        >Item</button>
-        <button
-          @click="activeTab = 'categories'"
-          class="py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-          :class="activeTab === 'categories' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
-        >Kategori</button>
+        <button type="button" role="tab" class="tab" :aria-selected="activeTab === 'items'" @click="activeTab = 'items'">Item</button>
+        <button type="button" role="tab" class="tab" :aria-selected="activeTab === 'categories'" @click="activeTab = 'categories'">Kategori</button>
         <button
           v-if="canViewTransactions"
+          type="button"
+          role="tab"
+          class="tab"
+          :aria-selected="activeTab === 'transactions'"
           @click="activeTab = 'transactions'"
-          class="py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-          :class="activeTab === 'transactions' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
         >Transaksi</button>
-      </nav>
+      </div>
+      <button v-if="activeTab === 'items' && canWriteItem" type="button" class="btn btn-primary" @click="openCreateItem">
+        <Plus class="w-4 h-4" aria-hidden="true" />
+        Tambah Item
+      </button>
+      <button v-else-if="activeTab === 'categories' && canWriteCategory" type="button" class="btn btn-primary" @click="openCreateCategory">
+        <Plus class="w-4 h-4" aria-hidden="true" />
+        Tambah Kategori
+      </button>
     </div>
 
-    <!-- ============ TAB: ITEMS ============ -->
-    <div v-if="activeTab === 'items'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
-      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-        <input v-model="itemSearch" type="text" placeholder="Cari nama item..." class="col-span-2 sm:col-auto sm:flex-1 sm:min-w-[180px] w-full min-w-0 px-3 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <select v-model="itemCategoryFilter" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="">Semua kategori</option>
-          <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <select v-model="itemSortBy" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="createdAt">Urut: Dibuat</option>
-          <option value="name">Urut: Nama</option>
-        </select>
-        <select v-model="itemSortOrder" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
+    <!-- ============ TAB: ITEM ============ -->
+    <section v-if="activeTab === 'items'" class="card overflow-hidden" aria-label="Daftar item">
+      <div class="p-4 border-b border-gray-200 grid grid-cols-2 gap-3 lg:grid-cols-[1fr_repeat(3,minmax(0,12rem))] items-end">
+        <div class="col-span-2 lg:col-span-1">
+          <label for="item-search" class="field-label text-xs">Cari</label>
+          <input id="item-search" v-model="itemSearch" type="search" placeholder="Nama item" class="field" />
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label for="item-category" class="field-label text-xs">Kategori</label>
+          <select id="item-category" v-model="itemCategoryFilter" class="field">
+            <option value="">Semua kategori</option>
+            <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="item-sort" class="field-label text-xs">Urutkan</label>
+          <select id="item-sort" v-model="itemSortBy" class="field">
+            <option value="createdAt">Dibuat</option>
+            <option value="name">Nama</option>
+          </select>
+        </div>
+        <div>
+          <label for="item-order" class="field-label text-xs">Arah</label>
+          <select id="item-order" v-model="itemSortOrder" class="field">
+            <option value="desc">Terbaru</option>
+            <option value="asc">Terlama</option>
+          </select>
+        </div>
       </div>
 
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Kategori</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Qty</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Deskripsi</th>
-              <th v-if="canWriteItem" class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingItems"><td :colspan="canWriteItem ? 5 : 4" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td></tr>
-            <tr v-else-if="!items.length"><td :colspan="canWriteItem ? 5 : 4" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada item.</td></tr>
-            <tr v-else v-for="it in items" :key="it.id" class="hover:bg-gray-50">
-              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ it.name }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ it.category?.name || categoryNameById(it.categoryId) }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-700 font-mono whitespace-nowrap">{{ it.qty ?? 0 }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-xs truncate" :title="it.description || ''">{{ it.description || '-' }}</td>
-              <td v-if="canWriteItem" class="px-3 py-1.5">
-                <div class="flex flex-wrap gap-1">
-                  <button @click="openTxModal(it)" class="action-btn action-btn-tx" title="Catat transaksi">📊</button>
-                  <button @click="openEditItem(it)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
-                  <button @click="removeItem(it)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div v-if="loadingItems" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="!items.length" class="empty-state">Belum ada item.</div>
+      <template v-else>
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-ink-muted">
+              <tr>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Nama</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Kategori</th>
+                <th scope="col" class="text-right font-medium px-4 py-2.5">Stok</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Deskripsi</th>
+                <th v-if="canWriteItem" scope="col" class="text-right font-medium px-4 py-2.5"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="it in items" :key="it.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-ink whitespace-nowrap">{{ it.name }}</td>
+                <td class="px-4 py-2"><span class="chip chip-gray">{{ resolvedCategoryName(it) }}</span></td>
+                <td class="px-4 py-2 text-right text-ink font-semibold tabular-nums">{{ it.qty ?? 0 }}</td>
+                <td class="px-4 py-2 text-ink-muted max-w-xs truncate" :title="it.description || ''">{{ it.description || '-' }}</td>
+                <td v-if="canWriteItem" class="px-4 py-2">
+                  <div class="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Catat transaksi"
+                      :aria-label="`Catat transaksi ${it.name}`"
+                      @click="openTxModal(it)"
+                    ><ArrowUpDown class="w-4 h-4" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Ubah"
+                      :aria-label="`Ubah item ${it.name}`"
+                      @click="openEditItem(it)"
+                    ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn-danger"
+                      title="Hapus"
+                      :aria-label="`Hapus item ${it.name}`"
+                      @click="removeItem(it)"
+                    ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingItems" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-        <div v-else-if="!items.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada item.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="it in items" :key="it.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ it.name }}</div>
-                <div class="mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-50 text-primary">{{ it.category?.name || categoryNameById(it.categoryId) }}</span>
-                  <span class="text-xs text-gray-500">Qty: <strong class="font-mono text-gray-700">{{ it.qty ?? 0 }}</strong></span>
-                </div>
-                <div v-if="it.description" class="mt-1 text-xs text-gray-500 line-clamp-2">{{ it.description }}</div>
+        <!-- MOBILE list -->
+        <ul class="md:hidden divide-y divide-gray-200">
+          <li v-for="it in items" :key="it.id" class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-ink truncate">{{ it.name }}</p>
+                <p class="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted truncate">
+                  <Tag class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  {{ resolvedCategoryName(it) }}
+                </p>
+              </div>
+              <div class="text-right shrink-0">
+                <p class="text-xs text-ink-muted">Stok</p>
+                <p class="text-lg font-semibold text-ink tabular-nums leading-tight">{{ it.qty ?? 0 }}</p>
               </div>
             </div>
-            <div v-if="canWriteItem" class="mt-2 flex flex-wrap gap-1">
-              <button @click="openTxModal(it)" class="action-btn action-btn-tx" title="Catat transaksi">📊 Tx</button>
-              <button @click="openEditItem(it)" class="action-btn action-btn-edit" title="Ubah">✏️ Ubah</button>
-              <button @click="removeItem(it)" class="action-btn action-btn-delete" title="Hapus">🗑️ Hapus</button>
+            <p v-if="it.description" class="mt-2 text-sm text-ink-muted line-clamp-2">{{ it.description }}</p>
+            <div v-if="canWriteItem" class="mt-3 flex items-center gap-2">
+              <button type="button" class="btn btn-secondary flex-1" @click="openTxModal(it)">
+                <ArrowUpDown class="w-4 h-4" aria-hidden="true" />
+                Catat transaksi
+              </button>
+              <div class="flex gap-1 ml-auto">
+                <button
+                  type="button"
+                  class="icon-btn w-11 h-11"
+                  :aria-label="`Ubah item ${it.name}`"
+                  @click="openEditItem(it)"
+                ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-danger w-11 h-11"
+                  :aria-label="`Hapus item ${it.name}`"
+                  @click="removeItem(it)"
+                ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+              </div>
             </div>
           </li>
         </ul>
-      </div>
 
-      <div v-if="!loadingItems && items.length" class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <div>Halaman {{ itemPage }} dari {{ itemTotalPages }}</div>
-        <div class="flex gap-2">
-          <button :disabled="itemPage <= 1" @click="itemPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-          <button :disabled="itemPage >= itemTotalPages" @click="itemPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+        <PaginationBar v-model:page="itemPage" :total-pages="itemTotalPages" />
+      </template>
+    </section>
+
+    <!-- ============ TAB: KATEGORI ============ -->
+    <section v-else-if="activeTab === 'categories'" class="card overflow-hidden" aria-label="Daftar kategori">
+      <div class="p-4 border-b border-gray-200 grid grid-cols-2 gap-3 sm:max-w-md items-end">
+        <div>
+          <label for="category-sort" class="field-label text-xs">Urutkan</label>
+          <select id="category-sort" v-model="categorySortBy" class="field">
+            <option value="createdAt">Dibuat</option>
+            <option value="name">Nama</option>
+          </select>
+        </div>
+        <div>
+          <label for="category-order" class="field-label text-xs">Arah</label>
+          <select id="category-order" v-model="categorySortOrder" class="field">
+            <option value="desc">Terbaru</option>
+            <option value="asc">Terlama</option>
+          </select>
         </div>
       </div>
-    </div>
 
-    <!-- ============ TAB: CATEGORIES ============ -->
-    <div v-else-if="activeTab === 'categories'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
-      <div class="px-3 py-2 border-b border-gray-200 flex flex-wrap gap-2 items-center">
-        <select v-model="categorySortBy" class="px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="createdAt">Urut: Dibuat</option>
-          <option value="name">Urut: Nama</option>
-        </select>
-        <select v-model="categorySortOrder" class="px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
-      </div>
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Dibuat</th>
-              <th v-if="canWriteCategory" class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingCategories"><td :colspan="canWriteCategory ? 3 : 2" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td></tr>
-            <tr v-else-if="!categories.length"><td :colspan="canWriteCategory ? 3 : 2" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada kategori.</td></tr>
-            <tr v-else v-for="c in categories" :key="c.id" class="hover:bg-gray-50">
-              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ c.name }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(c.createdAt) }}</td>
-              <td v-if="canWriteCategory" class="px-3 py-1.5">
-                <div class="flex flex-wrap gap-1">
-                  <button @click="openEditCategory(c)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
-                  <button @click="removeCategory(c)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingCategories" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-        <div v-else-if="!categories.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada kategori.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="c in categories" :key="c.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ c.name }}</div>
-                <div class="mt-0.5 text-xs text-gray-500">Dibuat {{ formatDate(c.createdAt) }}</div>
-              </div>
+      <div v-if="loadingCategories" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="!categories.length" class="empty-state">Belum ada kategori.</div>
+      <template v-else>
+        <ul class="divide-y divide-gray-200">
+          <li v-for="c in categories" :key="c.id" class="flex items-center gap-3 px-4 py-3">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium text-ink truncate">{{ c.name }}</p>
+              <p class="text-xs text-ink-muted tabular-nums">Dibuat {{ formatDate(c.createdAt) }}</p>
             </div>
-            <div v-if="canWriteCategory" class="mt-2 flex flex-wrap gap-1">
-              <button @click="openEditCategory(c)" class="action-btn action-btn-edit" title="Ubah">✏️ Ubah</button>
-              <button @click="removeCategory(c)" class="action-btn action-btn-delete" title="Hapus">🗑️ Hapus</button>
+            <div v-if="canWriteCategory" class="flex gap-1 -mr-2">
+              <button
+                type="button"
+                class="icon-btn w-11 h-11 md:w-9 md:h-9"
+                title="Ubah"
+                :aria-label="`Ubah kategori ${c.name}`"
+                @click="openEditCategory(c)"
+              ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+              <button
+                type="button"
+                class="icon-btn icon-btn-danger w-11 h-11 md:w-9 md:h-9"
+                title="Hapus"
+                :aria-label="`Hapus kategori ${c.name}`"
+                @click="removeCategory(c)"
+              ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
             </div>
           </li>
         </ul>
-      </div>
-      <div v-if="!loadingCategories && categories.length" class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <div>Halaman {{ categoryPage }} dari {{ categoryTotalPages }}</div>
-        <div class="flex gap-2">
-          <button :disabled="categoryPage <= 1" @click="categoryPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-          <button :disabled="categoryPage >= categoryTotalPages" @click="categoryPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+
+        <PaginationBar v-model:page="categoryPage" :total-pages="categoryTotalPages" />
+      </template>
+    </section>
+
+    <!-- ============ TAB: TRANSAKSI (admin) ============ -->
+    <section v-else-if="canViewTransactions" class="card overflow-hidden" aria-label="Riwayat transaksi">
+      <div class="p-4 border-b border-gray-200">
+        <button
+          type="button"
+          class="btn btn-secondary w-full md:hidden"
+          :aria-expanded="showTxFilters"
+          aria-controls="tx-filters"
+          @click="showTxFilters = !showTxFilters"
+        >
+          <SlidersHorizontal class="w-4 h-4" aria-hidden="true" />
+          {{ showTxFilters ? 'Sembunyikan filter' : 'Filter & urutan' }}
+        </button>
+        <div
+          id="tx-filters"
+          class="gap-3 grid-cols-2 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto] items-end"
+          :class="showTxFilters ? 'grid mt-3 md:mt-0' : 'hidden md:grid'"
+        >
+          <div>
+            <label for="tx-type" class="field-label text-xs">Tipe</label>
+            <select id="tx-type" v-model="txType" class="field">
+              <option value="">Semua tipe</option>
+              <option v-for="t in TX_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label for="tx-item" class="field-label text-xs">Item</label>
+            <select id="tx-item" v-model="txItemId" class="field">
+              <option value="">Semua item</option>
+              <option v-for="i in allItems" :key="i.id" :value="i.id">{{ i.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label for="tx-from" class="field-label text-xs">Dari tanggal</label>
+            <input id="tx-from" v-model="txFrom" type="date" class="field" />
+          </div>
+          <div>
+            <label for="tx-to" class="field-label text-xs">Sampai tanggal</label>
+            <input id="tx-to" v-model="txTo" type="date" class="field" />
+          </div>
+          <div>
+            <label for="tx-order" class="field-label text-xs">Urutan</label>
+            <select id="tx-order" v-model="txSortOrder" class="field">
+              <option value="desc">Terbaru</option>
+              <option value="asc">Terlama</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-primary col-span-2 lg:col-span-1" @click="applyTxDateFilter">Terapkan</button>
         </div>
       </div>
-    </div>
 
-    <!-- ============ TAB: TRANSACTIONS (admin only) ============ -->
-    <div v-else-if="activeTab === 'transactions' && canViewTransactions" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
-      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-        <select v-model="txType" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="">Semua tipe</option>
-          <option value="ADD">ADD</option>
-          <option value="MINUS">MINUS</option>
-          <option value="ADJUST">ADJUST</option>
-        </select>
-        <select v-model="txItemId" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="">Semua item</option>
-          <option v-for="i in allItems" :key="i.id" :value="i.id">{{ i.name }}</option>
-        </select>
-        <input v-model="txFrom" type="date" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <input v-model="txTo" type="date" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <select v-model="txSortOrder" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
-        <button @click="applyTxDateFilter" class="col-span-2 sm:col-auto w-full sm:w-auto px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-green-700">Filter</button>
-      </div>
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Tanggal</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Item</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Tipe</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Qty</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingTxs"><td colspan="5" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td></tr>
-            <tr v-else-if="!txs.length"><td colspan="5" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada transaksi.</td></tr>
-            <tr v-else v-for="t in txs" :key="t.id" class="hover:bg-gray-50">
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(t.createdAt || t.date) }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ t.item?.name || itemNameById(t.itemId) }}</td>
-              <td class="px-3 py-1.5 whitespace-nowrap">
-                <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="txTypeBadge(t.type)">{{ t.type }}</span>
-              </td>
-              <td class="px-3 py-1.5 text-sm text-gray-700 font-mono whitespace-nowrap">{{ t.changeQty }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-xs truncate" :title="t.note || ''">{{ t.note || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div v-if="loadingTxs" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="!txs.length" class="empty-state">Belum ada transaksi.</div>
+      <template v-else>
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-ink-muted">
+              <tr>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Waktu</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Item</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Tipe</th>
+                <th scope="col" class="text-right font-medium px-4 py-2.5">Perubahan</th>
+                <th scope="col" class="text-right font-medium px-4 py-2.5">Stok</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Catatan</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="t in txs" :key="t.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-ink-muted whitespace-nowrap tabular-nums">{{ formatDate(t.createdAt || t.date) }}</td>
+                <td class="px-4 py-2 font-medium text-ink whitespace-nowrap">{{ t.item?.name || itemNameById(t.itemId) }}</td>
+                <td class="px-4 py-2"><span class="chip" :class="txTypeInfo(t.type).cls">{{ txTypeInfo(t.type).label }}</span></td>
+                <td class="px-4 py-2 text-right font-semibold text-ink tabular-nums whitespace-nowrap">{{ txChangeLabel(t) }}</td>
+                <td class="px-4 py-2 text-right text-ink-muted tabular-nums whitespace-nowrap">{{ t.beforeQty ?? '-' }} → {{ t.afterQty ?? '-' }}</td>
+                <td class="px-4 py-2 text-ink-muted max-w-xs truncate" :title="t.note || ''">{{ t.note || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingTxs" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-        <div v-else-if="!txs.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada transaksi.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="t in txs" :key="t.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ t.item?.name || itemNameById(t.itemId) }}</div>
-                <div class="mt-0.5 text-xs text-gray-500">{{ formatDate(t.createdAt || t.date) }}</div>
+        <!-- MOBILE list -->
+        <ul class="md:hidden divide-y divide-gray-200">
+          <li v-for="t in txs" :key="t.id" class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-ink truncate">{{ t.item?.name || itemNameById(t.itemId) }}</p>
+                <p class="mt-0.5 text-xs text-ink-muted tabular-nums">{{ formatDate(t.createdAt || t.date) }}</p>
               </div>
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="txTypeBadge(t.type)">{{ t.type }}</span>
+              <span class="chip" :class="txTypeInfo(t.type).cls">{{ txTypeInfo(t.type).label }}</span>
             </div>
-            <div class="mt-1 text-xs text-gray-600">Qty: <strong class="font-mono text-gray-800">{{ t.qty }}</strong></div>
-            <div v-if="t.note" class="mt-1 text-xs text-gray-500 line-clamp-2">{{ t.note }}</div>
+            <dl class="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt class="text-xs text-ink-muted">Perubahan</dt>
+                <dd class="font-semibold text-ink tabular-nums">{{ txChangeLabel(t) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-ink-muted">Stok</dt>
+                <dd class="text-ink tabular-nums">{{ t.beforeQty ?? '-' }} → {{ t.afterQty ?? '-' }}</dd>
+              </div>
+            </dl>
+            <p v-if="t.note" class="mt-2 flex items-start gap-1.5 text-sm text-ink-muted">
+              <StickyNote class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+              <span class="line-clamp-2">{{ t.note }}</span>
+            </p>
           </li>
         </ul>
-      </div>
-      <div v-if="!loadingTxs && txs.length" class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <div>Halaman {{ txPage }} dari {{ txTotalPages }}</div>
-        <div class="flex gap-2">
-          <button :disabled="txPage <= 1" @click="txPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-          <button :disabled="txPage >= txTotalPages" @click="txPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
-        </div>
-      </div>
-    </div>
+
+        <PaginationBar v-model:page="txPage" :total-pages="txTotalPages" />
+      </template>
+    </section>
 
     <!-- ============ ITEM MODAL ============ -->
-    <div v-if="showItemModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" @click.self="showItemModal = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">{{ editingItem ? 'Ubah Item' : 'Tambah Item' }}</h3>
-        <form @submit.prevent="saveItem" class="space-y-4">
-          <div v-if="itemFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ itemFormError }}</div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input v-model="itemForm.name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
-            <select v-model="itemForm.categoryId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none">
-              <option value="" disabled>Pilih kategori</option>
-              <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-            <textarea v-model="itemForm.description" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div v-if="!editingItem">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Qty Awal</label>
-            <input v-model.number="itemForm.qty" type="number" min="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-            <p class="text-xs text-gray-400 mt-1">Setelah dibuat, qty diubah lewat transaksi (tombol 📊).</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
-            <textarea v-model="itemForm.note" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showItemModal = false" class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
-            <button type="submit" :disabled="savingItem" class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{{ savingItem ? 'Menyimpan...' : 'Simpan' }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- ============ CATEGORY MODAL ============ -->
-    <div v-if="showCategoryModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" @click.self="showCategoryModal = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">{{ editingCategory ? 'Ubah Kategori' : 'Tambah Kategori' }}</h3>
-        <form @submit.prevent="saveCategory" class="space-y-4">
-          <div v-if="categoryFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ categoryFormError }}</div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input v-model="categoryForm.name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showCategoryModal = false" class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
-            <button type="submit" :disabled="savingCategory" class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{{ savingCategory ? 'Menyimpan...' : 'Simpan' }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <BaseModal v-model:open="showItemModal" :title="editingItem ? 'Ubah Item' : 'Tambah Item'">
+      <form id="item-form" class="space-y-4" @submit.prevent="saveItem">
+        <p v-if="itemFormError" class="form-error" role="alert">{{ itemFormError }}</p>
+        <div>
+          <label for="item-form-name" class="field-label">Nama</label>
+          <input id="item-form-name" v-model="itemForm.name" type="text" required autocomplete="off" class="field" />
+        </div>
+        <div>
+          <label for="item-form-category" class="field-label">Kategori</label>
+          <select id="item-form-category" v-model="itemForm.categoryId" required class="field">
+            <option value="" disabled>Pilih kategori</option>
+            <option v-for="c in allCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <div v-if="!editingItem">
+          <label for="item-form-qty" class="field-label">Stok awal</label>
+          <input id="item-form-qty" v-model.number="itemForm.qty" type="number" min="0" inputmode="numeric" class="field" />
+          <p class="field-hint">Setelah item dibuat, stok diubah lewat "Catat transaksi".</p>
+        </div>
+        <div>
+          <label for="item-form-desc" class="field-label">Deskripsi <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="item-form-desc" v-model="itemForm.description" rows="2" class="field"></textarea>
+        </div>
+        <div>
+          <label for="item-form-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="item-form-note" v-model="itemForm.note" rows="2" class="field"></textarea>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showItemModal = false">Batal</button>
+        <button type="submit" form="item-form" class="btn btn-primary flex-1" :disabled="savingItem">
+          {{ savingItem ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
 
     <!-- ============ TRANSACTION MODAL ============ -->
-    <div v-if="showTxModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" @click.self="showTxModal = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h3 class="text-lg font-bold text-gray-800 mb-1">Catat Transaksi</h3>
-        <p class="text-sm text-gray-500 mb-4">Item: <strong>{{ txTargetItem?.name }}</strong> · Qty saat ini: <strong>{{ txTargetItem?.qty ?? 0 }}</strong></p>
-        <form @submit.prevent="saveTx" class="space-y-4">
-          <div v-if="txFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ txFormError }}</div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
-            <select v-model="txForm.type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none">
-              <option value="ADD">ADD (tambah stok)</option>
-              <option value="MINUS">MINUS (kurangi stok)</option>
-              <option value="ADJUST">ADJUST (set ke nilai)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Qty</label>
-            <input v-model.number="txForm.qty" type="number" min="0" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
-            <textarea v-model="txForm.note" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showTxModal = false" class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
-            <button type="submit" :disabled="savingTx" class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{{ savingTx ? 'Menyimpan...' : 'Simpan' }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <BaseModal v-model:open="showTxModal" title="Catat Transaksi">
+      <form id="tx-form" class="space-y-4" @submit.prevent="saveTx">
+        <p class="text-sm text-ink-muted">
+          Item: <strong class="text-ink">{{ txTargetItem?.name }}</strong>
+          · Stok saat ini: <strong class="text-ink tabular-nums">{{ txTargetItem?.qty ?? 0 }}</strong>
+        </p>
+        <p v-if="txFormError" class="form-error" role="alert">{{ txFormError }}</p>
+        <div>
+          <label for="tx-form-type" class="field-label">Tipe</label>
+          <select id="tx-form-type" v-model="txForm.type" class="field">
+            <option v-for="t in TX_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="tx-form-qty" class="field-label">Jumlah</label>
+          <input
+            id="tx-form-qty"
+            v-model.number="txForm.qty"
+            type="number"
+            min="0"
+            inputmode="numeric"
+            required
+            aria-describedby="tx-form-qty-hint"
+            class="field"
+          />
+          <p id="tx-form-qty-hint" class="field-hint">{{ txHint }}</p>
+        </div>
+        <div>
+          <label for="tx-form-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="tx-form-note" v-model="txForm.note" rows="2" class="field"></textarea>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showTxModal = false">Batal</button>
+        <button type="submit" form="tx-form" class="btn btn-primary flex-1" :disabled="savingTx">
+          {{ savingTx ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
+
+    <!-- ============ CATEGORY MODAL ============ -->
+    <BaseModal v-model:open="showCategoryModal" :title="editingCategory ? 'Ubah Kategori' : 'Tambah Kategori'">
+      <form id="category-form" class="space-y-4" @submit.prevent="saveCategory">
+        <p v-if="categoryFormError" class="form-error" role="alert">{{ categoryFormError }}</p>
+        <div>
+          <label for="category-form-name" class="field-label">Nama</label>
+          <input id="category-form-name" v-model="categoryForm.name" type="text" required autocomplete="off" class="field" />
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showCategoryModal = false">Batal</button>
+        <button type="submit" form="category-form" class="btn btn-primary flex-1" :disabled="savingCategory">
+          {{ savingCategory ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
-
-<style scoped>
-.fade-up { opacity: 0; transform: translateY(16px); animation: fadeUp 0.5s ease forwards; }
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
-.fade-up-enter-active, .fade-up-leave-active { transition: all 0.25s ease; }
-.fade-up-enter-from, .fade-up-leave-to { opacity: 0; transform: translateY(-6px); }
-
-.action-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 10px; border-radius: 8px;
-  font-size: 0.72rem; font-weight: 600;
-  border: 1px solid transparent; cursor: pointer;
-  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-}
-.action-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-.action-btn-edit { background: #e8f5e9; color: #2E7D32; border-color: #c8e6c9; }
-.action-btn-edit:hover { background: #c8e6c9; }
-.action-btn-tx { background: #eef2ff; color: #4338ca; border-color: #e0e7ff; }
-.action-btn-tx:hover { background: #e0e7ff; }
-.action-btn-delete { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.action-btn-delete:hover { background: #fca5a5; color: white; }
-</style>
