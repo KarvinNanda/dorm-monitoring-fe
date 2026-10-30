@@ -67,12 +67,13 @@ describe('FacilityPage', () => {
     expect(facilityService.list).toHaveBeenCalled()
   })
 
-  it('menampilkan reservasi dengan status PENDING', async () => {
+  it('menampilkan reservasi; status PENDING tampil sebagai "Menunggu"', async () => {
     const wrapper = mount(FacilityPage)
     await flushPromises()
     expect(wrapper.text()).toContain('Rapat bulanan')
     expect(wrapper.text()).toContain('Aula')
-    expect(wrapper.text()).toContain('PENDING')
+    expect(wrapper.text()).toContain('Menunggu')
+    expect(wrapper.text()).not.toContain('PENDING')
   })
 
   it('switch ke tab Daftar Fasilitas menampilkan fasilitas', async () => {
@@ -108,22 +109,59 @@ describe('FacilityPage', () => {
   it('quick-approve memanggil update dengan status APPROVED', async () => {
     const wrapper = mount(FacilityPage)
     await flushPromises()
-    // Tombol approve title="Approve" hanya muncul untuk status PENDING
-    const approveBtn = wrapper.find('button[title="Approve"]')
+    // Tombol Setujui hanya muncul untuk status PENDING
+    const approveBtn = wrapper.find('button[title="Setujui"]')
     expect(approveBtn.exists()).toBe(true)
     await approveBtn.trigger('click')
     await flushPromises()
     expect(facilityReservationService.update).toHaveBeenCalledWith(10, { status: 'APPROVED' })
+    expect(wrapper.text()).toContain('Reservasi disetujui')
   })
 
   it('quick-reject memanggil update dengan status REJECTED', async () => {
     const wrapper = mount(FacilityPage)
     await flushPromises()
-    const rejectBtn = wrapper.find('button[title="Reject"]')
+    const rejectBtn = wrapper.find('button[title="Tolak"]')
     expect(rejectBtn.exists()).toBe(true)
     await rejectBtn.trigger('click')
     await flushPromises()
     expect(facilityReservationService.update).toHaveBeenCalledWith(10, { status: 'REJECTED' })
+  })
+
+  it('tanpa h1 (judul di header layout) dan tanpa emoji', async () => {
+    const wrapper = mount(FacilityPage)
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.html()).not.toMatch(/\p{Extended_Pictographic}/u)
+  })
+
+  it('tab memakai role tab + aria-selected', async () => {
+    const wrapper = mount(FacilityPage)
+    await flushPromises()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((t) => t.text())).toEqual(['Reservasi', 'Daftar Fasilitas'])
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    await tabs[1].trigger('click')
+    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+  })
+
+  it('filter status: label Indonesia, nilai tetap enum API', async () => {
+    const wrapper = mount(FacilityPage)
+    await flushPromises()
+    const select = wrapper.find('#reservation-status')
+    const options = select.findAll('option').map((o) => [o.attributes('value'), o.text()])
+    expect(options).toContainEqual(['PENDING', 'Menunggu'])
+    expect(options).toContainEqual(['APPROVED', 'Disetujui'])
+    await select.setValue('APPROVED')
+    await flushPromises()
+    expect(facilityReservationService.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'APPROVED' }))
+  })
+
+  it('tombol aksi ikon punya aria-label yang menyebut reservasinya', async () => {
+    const wrapper = mount(FacilityPage)
+    await flushPromises()
+    expect(wrapper.find('button[aria-label="Setujui reservasi Rapat bulanan"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="Hapus reservasi Rapat bulanan"]').exists()).toBe(true)
   })
 
   it('toast error bila list reservasi gagal', async () => {
@@ -174,8 +212,9 @@ describe('FacilityPage — permission gating (non-admin)', () => {
   it('tidak menampilkan tombol Approve / Reject untuk reservasi PENDING', async () => {
     const wrapper = mount(FacilityPage)
     await flushPromises()
-    expect(wrapper.find('button[title="Approve"]').exists()).toBe(false)
-    expect(wrapper.find('button[title="Reject"]').exists()).toBe(false)
+    expect(wrapper.find('button[title="Setujui"]').exists()).toBe(false)
+    expect(wrapper.find('button[title="Tolak"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Setujui')
   })
 
   it('tidak menampilkan tombol Edit / Hapus reservasi', async () => {

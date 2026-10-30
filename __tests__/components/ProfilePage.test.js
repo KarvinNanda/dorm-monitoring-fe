@@ -1,6 +1,6 @@
 /**
  * ProfilePage smoke test.
- * Verifikasi: fetchMe on mount, save profile, dan validasi modal ganti password.
+ * Verifikasi: fetchMe on mount, save profile, dan validasi modal ganti kata sandi.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -19,6 +19,11 @@ import ProfilePage from '@/modules/user/views/ProfilePage.vue'
 import { authService } from '@/services/authService'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+
+async function openPasswordModal(wrapper) {
+  await wrapper.findAll('button').find((b) => b.text().includes('Ganti kata sandi')).trigger('click')
+  await flushPromises()
+}
 
 describe('ProfilePage', () => {
   beforeEach(() => {
@@ -70,9 +75,7 @@ describe('ProfilePage', () => {
   it('konfirmasi password tidak cocok → blokir submit + pesan', async () => {
     const wrapper = mount(ProfilePage)
     await flushPromises()
-    // Buka modal password
-    await wrapper.find('button.bg-amber-50').trigger('click')
-    await flushPromises()
+    await openPasswordModal(wrapper)
     const inputs = wrapper.findAll('input[type="password"]')
     await inputs[0].setValue('current123')
     await inputs[1].setValue('newpass12')
@@ -81,15 +84,14 @@ describe('ProfilePage', () => {
     const forms = wrapper.findAll('form')
     await forms[forms.length - 1].trigger('submit.prevent')
     await flushPromises()
-    expect(wrapper.text()).toContain('Konfirmasi password tidak cocok')
+    expect(wrapper.text()).toContain('Konfirmasi kata sandi tidak cocok')
     expect(authService.resetPassword).not.toHaveBeenCalled()
   })
 
   it('password baru < 8 karakter → blokir submit', async () => {
     const wrapper = mount(ProfilePage)
     await flushPromises()
-    await wrapper.find('button.bg-amber-50').trigger('click')
-    await flushPromises()
+    await openPasswordModal(wrapper)
     const inputs = wrapper.findAll('input[type="password"]')
     await inputs[0].setValue('current123')
     await inputs[1].setValue('short')
@@ -105,8 +107,7 @@ describe('ProfilePage', () => {
     authService.resetPassword.mockResolvedValueOnce({})
     const wrapper = mount(ProfilePage)
     await flushPromises()
-    await wrapper.find('button.bg-amber-50').trigger('click')
-    await flushPromises()
+    await openPasswordModal(wrapper)
     const inputs = wrapper.findAll('input[type="password"]')
     await inputs[0].setValue('current123')
     await inputs[1].setValue('newpass12')
@@ -117,11 +118,10 @@ describe('ProfilePage', () => {
     expect(authService.resetPassword).toHaveBeenCalledWith('current123', 'newpass12')
   })
 
-  it('modal ganti password: ketiga field punya tombol mata', async () => {
+  it('modal ganti kata sandi: ketiga field punya tombol mata', async () => {
     const wrapper = mount(ProfilePage)
     await flushPromises()
-    await wrapper.find('button.bg-amber-50').trigger('click')
-    await flushPromises()
+    await openPasswordModal(wrapper)
     expect(wrapper.findAll('input[type="password"]').length).toBe(3)
     expect(wrapper.findAll('button[aria-label="Tampilkan kata sandi"]').length).toBe(3)
   })
@@ -135,5 +135,59 @@ describe('ProfilePage', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Server down')
     expect(wrapper.text()).toContain('Coba lagi')
+  })
+
+  it('tanpa h1 (judul ada di header layout) dan tanpa emoji', async () => {
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/\p{Extended_Pictographic}/u)
+  })
+
+  it('setiap input punya label yang tersambung (label[for] = input id)', async () => {
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await openPasswordModal(wrapper)
+    const inputs = wrapper.findAll('input')
+    expect(inputs.length).toBe(6)
+    for (const input of inputs) {
+      const id = input.attributes('id')
+      expect(id, 'input tanpa id').toBeTruthy()
+      expect(wrapper.find(`label[for="${id}"]`).exists(), `label untuk #${id}`).toBe(true)
+    }
+  })
+
+  it('ganti kata sandi memakai dialog yang aksesibel', async () => {
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await openPasswordModal(wrapper)
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.attributes('aria-modal')).toBe('true')
+  })
+
+  it('save profile sukses → toast "Profil berhasil diperbarui"', async () => {
+    userService.updateMe.mockResolvedValueOnce({ id: 1, name: 'Karvin', email: 'k@x', roles: ['admin'] })
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').text()).toContain('Profil berhasil diperbarui')
+  })
+
+  it('reset kata sandi sukses → dialog tertutup dan toast tampil', async () => {
+    authService.resetPassword.mockResolvedValueOnce({})
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await openPasswordModal(wrapper)
+    const inputs = wrapper.findAll('input[type="password"]')
+    await inputs[0].setValue('current123')
+    await inputs[1].setValue('newpass12')
+    await inputs[2].setValue('newpass12')
+    const forms = wrapper.findAll('form')
+    await forms[forms.length - 1].trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.find('[role="status"]').text()).toContain('Kata sandi berhasil diganti')
   })
 })

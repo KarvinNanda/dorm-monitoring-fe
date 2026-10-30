@@ -1,6 +1,10 @@
 <script setup>
-import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, onMounted, watch } from 'vue'
+import { KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserCheck, UserX } from 'lucide-vue-next'
+import AppToast from '@/components/AppToast.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { confirmDialog } from '@/composables/useConfirm'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
@@ -176,7 +180,7 @@ async function saveUser() {
     return
   }
   if (!editingUser.value && (!form.value.password || form.value.password.length < 8)) {
-    formError.value = 'Password minimal 8 karakter'
+    formError.value = 'Kata sandi minimal 8 karakter'
     return
   }
 
@@ -226,6 +230,14 @@ async function removeUser(user) {
 
 // ============ ACTIVATE / DEACTIVATE ============
 async function toggleActivation(user) {
+  if (isActive(user)) {
+    const ok = await confirmDialog({
+      title: 'Nonaktifkan user?',
+      message: `${user.name} tidak bisa login sampai diaktifkan lagi.`,
+      confirmLabel: 'Nonaktifkan'
+    })
+    if (!ok) return
+  }
   try {
     if (isActive(user)) {
       await userService.deactivate(user.id)
@@ -251,7 +263,7 @@ function openPasswordModal(user) {
 async function submitPassword() {
   passwordError.value = ''
   if (!passwordForm.value.newPassword || passwordForm.value.newPassword.length < 8) {
-    passwordError.value = 'Password minimal 8 karakter'
+    passwordError.value = 'Kata sandi minimal 8 karakter'
     return
   }
   savingPassword.value = true
@@ -259,10 +271,10 @@ async function submitPassword() {
     // Import authService dinamis supaya file ini tetap fokus pada user
     const { authService } = await import('@/services/authService')
     await authService.changePassword(passwordTarget.value.id, passwordForm.value.newPassword)
-    showToast('Password user berhasil direset')
+    showToast('Kata sandi user berhasil direset')
     showPasswordModal.value = false
   } catch (err) {
-    passwordError.value = extractError(err, 'Gagal mengganti password')
+    passwordError.value = extractError(err, 'Gagal mereset kata sandi')
   } finally {
     savingPassword.value = false
   }
@@ -302,499 +314,270 @@ async function submitRoles() {
   }
 }
 
-function toggleRoleId(id, listRef) {
-  // console.log(listRef.roleIds.indexOf(id))
-  const idx = listRef.roleIds.indexOf(id)
-  if (idx === -1) listRef.roleIds.push(id)
-  else listRef.roleIds.splice(idx, 1)
+function roleLabel(r) {
+  return r.name || r.code || `#${r.id}`
 }
 </script>
 
 <template>
-  <div>
-    <!-- ============ HEADER ============ -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+  <div class="space-y-4">
+    <AppToast :toast="toast" />
+
+    <!-- Toolbar. Judul halaman sudah ada di header layout. -->
+    <section class="card p-4 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_auto_auto_auto] items-end" aria-label="Cari dan urutkan user">
+      <div class="col-span-2 sm:col-span-1">
+        <label for="user-search" class="field-label text-xs">Cari</label>
+        <input id="user-search" v-model="search" type="search" placeholder="Nama atau email" class="field" />
+      </div>
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold text-gray-800">User Management</h1>
-        <p class="text-xs sm:text-sm text-gray-500">Kelola akun pengguna, role, dan aktivasi.</p>
+        <label for="user-sort" class="field-label text-xs">Urutkan</label>
+        <select id="user-sort" v-model="sortBy" class="field">
+          <option value="createdAt">Dibuat</option>
+          <option value="name">Nama</option>
+        </select>
       </div>
-      <button
-        @click="openCreate"
-        class="bg-primary text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors w-full sm:w-auto"
-      >
-        + Tambah User
+      <div>
+        <label for="user-order" class="field-label text-xs">Arah</label>
+        <select id="user-order" v-model="sortOrder" class="field">
+          <option value="desc">Terbaru</option>
+          <option value="asc">Terlama</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary col-span-2 sm:col-span-1" @click="openCreate">
+        <Plus class="w-4 h-4" aria-hidden="true" />
+        Tambah User
       </button>
-    </div>
+    </section>
 
-    <!-- ============ FILTER BAR ============ -->
-    <!-- Mobile: search full-width, dua select sebar 2 kolom.
-         Desktop (sm+): search flex-1, select inline. -->
-    <div class="bg-white border border-gray-200 rounded-xl p-3 mb-4 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap sm:gap-3 sm:p-4">
-      <input
-        v-model="search"
-        type="text"
-        placeholder="Cari nama atau email..."
-        class="col-span-2 sm:col-auto sm:flex-1 sm:min-w-[200px] w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-      />
-      <select
-        v-model="sortBy"
-        title="Urutkan berdasarkan"
-        class="w-full sm:w-auto min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary"
-      >
-        <option value="createdAt">Urut: Tanggal Dibuat</option>
-        <option value="name">Urut: Nama</option>
-      </select>
-      <select
-        v-model="sortOrder"
-        title="Arah"
-        class="w-full sm:w-auto min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary"
-      >
-        <option value="desc">Terbaru</option>
-        <option value="asc">Terlama</option>
-      </select>
-    </div>
-
-    <!-- ============ TOAST ============ -->
-    <transition name="fade">
-      <div
-        v-if="toast.show"
-        class="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm"
-        :class="toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
-      >
-        {{ toast.message }}
+    <section class="card overflow-hidden" aria-label="Daftar user">
+      <div v-if="loadingList" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="listError" class="p-4">
+        <div class="form-error items-center justify-between" role="alert">
+          <span>{{ listError }}</span>
+          <button type="button" class="btn btn-secondary h-9 shrink-0" @click="fetchUsers">Coba lagi</button>
+        </div>
       </div>
-    </transition>
+      <div v-else-if="!visibleUsers.length" class="empty-state">Tidak ada user.</div>
+      <template v-else>
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-ink-muted">
+              <tr>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Nama</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Role</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Status</th>
+                <th scope="col" class="text-right font-medium px-4 py-2.5"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="user in visibleUsers" :key="user.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2.5">
+                  <p class="font-medium text-ink">{{ user.name }}</p>
+                  <p class="text-xs text-ink-muted">{{ user.email }}</p>
+                </td>
+                <td class="px-4 py-2.5">
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="rn in roleNames(user)" :key="rn" class="chip chip-brand capitalize">{{ rn }}</span>
+                    <span v-if="!roleNames(user).length" class="text-ink-muted">-</span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="chip" :class="isActive(user) ? 'chip-brand' : 'chip-gray'">{{ isActive(user) ? 'Aktif' : 'Nonaktif' }}</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <div class="flex justify-end gap-1">
+                    <button type="button" class="icon-btn" title="Ubah" :aria-label="`Ubah ${user.name}`" @click="openEdit(user)">
+                      <Pencil class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="icon-btn" title="Atur role" :aria-label="`Atur role ${user.name}`" @click="openRolesModal(user)">
+                      <ShieldCheck class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="icon-btn" title="Reset kata sandi" :aria-label="`Reset kata sandi ${user.name}`" @click="openPasswordModal(user)">
+                      <KeyRound class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      :class="{ 'icon-btn-danger': isActive(user) }"
+                      :title="isActive(user) ? 'Nonaktifkan' : 'Aktifkan'"
+                      :aria-label="`${isActive(user) ? 'Nonaktifkan' : 'Aktifkan'} ${user.name}`"
+                      @click="toggleActivation(user)"
+                    >
+                      <UserX v-if="isActive(user)" class="w-4 h-4" aria-hidden="true" />
+                      <UserCheck v-else class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="icon-btn icon-btn-danger" title="Hapus" :aria-label="`Hapus user ${user.name}`" @click="removeUser(user)">
+                      <Trash2 class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-    <!-- ============ TABLE / LIST ============ -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Role</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-              <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingList">
-              <td colspan="5" class="px-6 py-8 text-center text-gray-400 text-sm">Memuat data...</td>
-            </tr>
-            <tr v-else-if="listError">
-              <td colspan="5" class="px-6 py-8 text-center text-red-500 text-sm">{{ listError }}</td>
-            </tr>
-            <tr v-else-if="!visibleUsers.length">
-              <td colspan="5" class="px-6 py-8 text-center text-gray-400 text-sm">Tidak ada user.</td>
-            </tr>
-            <tr v-else v-for="user in visibleUsers" :key="user.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-800 font-medium">{{ user.name }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{{ user.email }}</td>
-              <td class="px-6 py-4">
-                <div class="flex flex-wrap gap-1">
-                  <span
-                    v-for="rn in roleNames(user)"
-                    :key="rn"
-                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-primary capitalize"
-                  >
-                    {{ rn }}
-                  </span>
-                  <span v-if="!roleNames(user).length" class="text-xs text-gray-400">—</span>
-                </div>
-              </td>
-              <td class="px-6 py-4">
-                <span
-                  class="text-xs font-medium px-2 py-1 rounded-full"
-                  :class="isActive(user) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
-                >
-                  {{ isActive(user) ? 'active' : 'inactive' }}
-                </span>
-              </td>
-              <td class="px-6 py-4">
-                <div class="flex flex-wrap gap-1.5">
-                  <button
-                    @click="openEdit(user)"
-                    title="Edit user"
-                    class="action-btn action-btn-edit"
-                  >
-                    <span>✏️</span>
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    @click="openRolesModal(user)"
-                    title="Atur role"
-                    class="action-btn action-btn-role"
-                  >
-                    <span>🛡️</span>
-                    <span>Role</span>
-                  </button>
-                  <button
-                    @click="openPasswordModal(user)"
-                    title="Reset password"
-                    class="action-btn action-btn-password"
-                  >
-                    <span>🔑</span>
-                    <span>Password</span>
-                  </button>
-                  <button
-                    @click="toggleActivation(user)"
-                    :title="isActive(user) ? 'Nonaktifkan user' : 'Aktifkan user'"
-                    class="action-btn"
-                    :class="isActive(user) ? 'action-btn-deactivate' : 'action-btn-activate'"
-                  >
-                    <span>{{ isActive(user) ? '⛔' : '✅' }}</span>
-                    <span>{{ isActive(user) ? 'Deactivate' : 'Activate' }}</span>
-                  </button>
-                  <button
-                    @click="removeUser(user)"
-                    title="Hapus user"
-                    class="action-btn action-btn-delete"
-                  >
-                    <span>🗑️</span>
-                    <span>Hapus</span>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingList" class="px-4 py-6 text-center text-gray-400 text-sm">Memuat data...</div>
-        <div v-else-if="listError" class="px-4 py-6 text-center text-red-500 text-sm">{{ listError }}</div>
-        <div v-else-if="!visibleUsers.length" class="px-4 py-6 text-center text-gray-400 text-sm">Tidak ada user.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="user in visibleUsers" :key="user.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ user.name }}</div>
-                <div class="text-xs text-gray-500 truncate">{{ user.email }}</div>
-                <div class="mt-1 flex flex-wrap gap-1">
-                  <span
-                    v-for="rn in roleNames(user)"
-                    :key="rn"
-                    class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-primary capitalize"
-                  >{{ rn }}</span>
-                  <span v-if="!roleNames(user).length" class="text-xs text-gray-400">—</span>
-                </div>
+        <!-- MOBILE list -->
+        <ul class="md:hidden divide-y divide-gray-200">
+          <li v-for="user in visibleUsers" :key="user.id" class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-ink truncate">{{ user.name }}</p>
+                <p class="text-sm text-ink-muted truncate">{{ user.email }}</p>
               </div>
-              <span
-                class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
-                :class="isActive(user) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
-              >{{ isActive(user) ? 'active' : 'inactive' }}</span>
+              <span class="chip" :class="isActive(user) ? 'chip-brand' : 'chip-gray'">{{ isActive(user) ? 'Aktif' : 'Nonaktif' }}</span>
             </div>
             <div class="mt-2 flex flex-wrap gap-1">
-              <button @click="openEdit(user)" class="action-btn action-btn-edit"><span>✏️</span><span>Edit</span></button>
-              <button @click="openRolesModal(user)" class="action-btn action-btn-role"><span>🛡️</span><span>Role</span></button>
-              <button @click="openPasswordModal(user)" class="action-btn action-btn-password"><span>🔑</span><span>Password</span></button>
-              <button
-                @click="toggleActivation(user)"
-                class="action-btn"
-                :class="isActive(user) ? 'action-btn-deactivate' : 'action-btn-activate'"
-              >
-                <span>{{ isActive(user) ? '⛔' : '✅' }}</span>
-                <span>{{ isActive(user) ? 'Deactivate' : 'Activate' }}</span>
+              <span v-for="rn in roleNames(user)" :key="rn" class="chip chip-brand capitalize">{{ rn }}</span>
+              <span v-if="!roleNames(user).length" class="text-sm text-ink-muted">Tanpa role</span>
+            </div>
+            <div class="mt-3 flex items-center gap-1">
+              <button type="button" class="btn btn-secondary flex-1 mr-1" @click="openEdit(user)">
+                <Pencil class="w-4 h-4" aria-hidden="true" />
+                Ubah
               </button>
-              <button @click="removeUser(user)" class="action-btn action-btn-delete"><span>🗑️</span><span>Hapus</span></button>
+              <button type="button" class="icon-btn w-11 h-11" :aria-label="`Atur role ${user.name}`" @click="openRolesModal(user)">
+                <ShieldCheck class="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button type="button" class="icon-btn w-11 h-11" :aria-label="`Reset kata sandi ${user.name}`" @click="openPasswordModal(user)">
+                <KeyRound class="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="icon-btn w-11 h-11"
+                :class="{ 'icon-btn-danger': isActive(user) }"
+                :aria-label="`${isActive(user) ? 'Nonaktifkan' : 'Aktifkan'} ${user.name}`"
+                @click="toggleActivation(user)"
+              >
+                <UserX v-if="isActive(user)" class="w-4 h-4" aria-hidden="true" />
+                <UserCheck v-else class="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button type="button" class="icon-btn icon-btn-danger w-11 h-11" :aria-label="`Hapus user ${user.name}`" @click="removeUser(user)">
+                <Trash2 class="w-4 h-4" aria-hidden="true" />
+              </button>
             </div>
           </li>
         </ul>
-      </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="!loadingList && visibleUsers.length"
-        class="flex items-center justify-between px-6 py-3 border-t border-gray-200 text-sm text-gray-500"
-      >
-        <div>Halaman {{ page }} dari {{ totalPages }}</div>
-        <div class="flex gap-2">
-          <button
-            :disabled="page <= 1"
-            @click="page--"
-            class="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
-          >
-            ‹ Prev
-          </button>
-          <button
-            :disabled="page >= totalPages"
-            @click="page++"
-            class="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50"
-          >
-            Next ›
-          </button>
+        <PaginationBar v-model:page="page" :total-pages="totalPages" />
+      </template>
+    </section>
+
+    <!-- ============ CREATE / EDIT MODAL ============ -->
+    <BaseModal v-model:open="showModal" :title="editingUser ? 'Ubah User' : 'Tambah User'">
+      <form id="user-form" class="space-y-4" @submit.prevent="saveUser">
+        <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+        <div>
+          <label for="user-form-name" class="field-label">Nama</label>
+          <input id="user-form-name" v-model="form.name" type="text" required autocomplete="off" class="field" />
         </div>
-      </div>
-    </div>
-
-    <!-- ============ CREATE/EDIT MODAL ============ -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
-      @click.self="showModal = false"
-    >
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">
-          {{ editingUser ? 'Edit User' : 'Tambah User' }}
-        </h3>
-        <form @submit.prevent="saveUser" class="space-y-4">
-          <div v-if="formError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ formError }}</div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input
-              v-model="form.name"
-              type="text"
-              required
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              v-model="form.email"
-              type="email"
-              :required="!editingUser"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">No. Telepon (opsional)</label>
-            <input
-              v-model="form.phoneNumber"
-              type="text"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div v-if="!editingUser">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <PasswordInput
-              v-model="form.password"
-              minlength="8"
-              autocomplete="new-password"
-              required
-              placeholder="Minimal 8 karakter"
-              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div v-if="!editingUser && roles.length">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Role (opsional)</label>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="r in roles"
-                :key="r.id"
-                type="button"
-                @click="toggleRoleId(r.id, form)"
-                class="text-xs px-3 py-1 rounded-full border transition-colors"
-                :class="
-                  form.roleIds.includes(r.id)
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                "
-              >
-                {{ r.name || r.code }}
-              </button>
-            </div>
-          </div>
-
-          <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              @click="showModal = false"
-              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+        <div>
+          <label for="user-form-email" class="field-label">Email</label>
+          <input id="user-form-email" v-model="form.email" type="email" :required="!editingUser" autocomplete="off" class="field" />
+        </div>
+        <div>
+          <label for="user-form-phone" class="field-label">No. telepon <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <input
+            id="user-form-phone"
+            v-model="form.phoneNumber"
+            type="tel"
+            inputmode="tel"
+            autocomplete="off"
+            placeholder="08xxxxxxxxxx"
+            class="field"
+          />
+        </div>
+        <div v-if="!editingUser">
+          <label for="user-form-password" class="field-label">Kata sandi</label>
+          <PasswordInput
+            id="user-form-password"
+            v-model="form.password"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            aria-describedby="user-form-password-hint"
+            class="field pr-12"
+          />
+          <p id="user-form-password-hint" class="field-hint">Minimal 8 karakter.</p>
+        </div>
+        <fieldset v-if="!editingUser && roles.length">
+          <legend class="field-label">Role <span class="font-normal text-ink-muted">(opsional)</span></legend>
+          <div class="grid grid-cols-2 gap-2">
+            <label
+              v-for="r in roles"
+              :key="r.id"
+              class="flex items-center gap-2 h-11 px-3 rounded-xl border border-gray-300 text-sm text-ink capitalize cursor-pointer has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
             >
-              Batal
-            </button>
-            <button
-              type="submit"
-              :disabled="saving"
-              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              {{ saving ? 'Menyimpan...' : 'Simpan' }}
-            </button>
+              <input v-model="form.roleIds" type="checkbox" :value="r.id" class="w-4 h-4 accent-brand-600" />
+              {{ roleLabel(r) }}
+            </label>
           </div>
-        </form>
-      </div>
-    </div>
+        </fieldset>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showModal = false">Batal</button>
+        <button type="submit" form="user-form" class="btn btn-primary flex-1" :disabled="saving">
+          {{ saving ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
 
-    <!-- ============ PASSWORD MODAL ============ -->
-    <div
-      v-if="showPasswordModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
-      @click.self="showPasswordModal = false"
-    >
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h3 class="text-lg font-bold text-gray-800 mb-1">Reset Password</h3>
-        <p class="text-sm text-gray-500 mb-4">User: <strong>{{ passwordTarget?.name }}</strong></p>
-        <form @submit.prevent="submitPassword" class="space-y-4">
-          <div v-if="passwordError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ passwordError }}</div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Password Baru</label>
-            <PasswordInput
-              v-model="passwordForm.newPassword"
-              minlength="8"
-              autocomplete="new-password"
-              required
-              class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              @click="showPasswordModal = false"
-              class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              :disabled="savingPassword"
-              class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {{ savingPassword ? 'Menyimpan...' : 'Simpan' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <!-- ============ RESET PASSWORD MODAL ============ -->
+    <BaseModal v-model:open="showPasswordModal" title="Reset Kata Sandi">
+      <form id="password-form" class="space-y-4" @submit.prevent="submitPassword">
+        <p class="text-sm text-ink-muted">
+          User: <strong class="text-ink">{{ passwordTarget?.name }}</strong>
+        </p>
+        <p v-if="passwordError" class="form-error" role="alert">{{ passwordError }}</p>
+        <div>
+          <label for="password-form-new" class="field-label">Kata sandi baru</label>
+          <PasswordInput
+            id="password-form-new"
+            v-model="passwordForm.newPassword"
+            required
+            minlength="8"
+            autocomplete="new-password"
+            aria-describedby="password-form-hint"
+            class="field pr-12"
+          />
+          <p id="password-form-hint" class="field-hint">Minimal 8 karakter. Sampaikan ke user lewat jalur yang aman.</p>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showPasswordModal = false">Batal</button>
+        <button type="submit" form="password-form" class="btn btn-primary flex-1" :disabled="savingPassword">
+          {{ savingPassword ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
 
     <!-- ============ ROLES MODAL ============ -->
-    <div
-      v-if="showRolesModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4"
-      @click.self="showRolesModal = false"
-    >
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h3 class="text-lg font-bold text-gray-800 mb-1">Atur Role</h3>
-        <p class="text-sm text-gray-500 mb-4">User: <strong>{{ rolesTarget?.name }}</strong></p>
-        <div v-if="!roles.length" class="text-sm text-gray-400 mb-4">Daftar role belum tersedia.</div>
-        <div class="flex flex-wrap gap-2 mb-4">
-          <button
-            v-for="r in roles"
-            :key="r.id"
-            type="button"
-            @click="toggleRoleId(r.id, rolesForm)"
-            class="text-xs px-3 py-1 rounded-full border transition-colors"
-            :class="
-              rolesForm.roleIds.includes(r.id)
-                ? 'bg-primary text-white border-primary'
-                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-            "
-          >
-            {{ r.name || r.code }}
-          </button>
-        </div>
-        <div class="flex gap-3">
-          <button
-            type="button"
-            @click="showRolesModal = false"
-            class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
-            Batal
-          </button>
-          <button
-            type="button"
-            @click="submitRoles"
-            :disabled="savingRoles"
-            class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-          >
-            {{ savingRoles ? 'Menyimpan...' : 'Simpan' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <BaseModal v-model:open="showRolesModal" title="Atur Role">
+      <form id="roles-form" class="space-y-4" @submit.prevent="submitRoles">
+        <p class="text-sm text-ink-muted">
+          User: <strong class="text-ink">{{ rolesTarget?.name }}</strong>
+        </p>
+        <p v-if="!roles.length" class="text-sm text-ink-muted">Daftar role belum tersedia.</p>
+        <fieldset v-else>
+          <legend class="sr-only">Role untuk {{ rolesTarget?.name }}</legend>
+          <div class="grid grid-cols-2 gap-2">
+            <label
+              v-for="r in roles"
+              :key="r.id"
+              class="flex items-center gap-2 h-11 px-3 rounded-xl border border-gray-300 text-sm text-ink capitalize cursor-pointer has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50"
+            >
+              <input v-model="rolesForm.roleIds" type="checkbox" :value="r.id" class="w-4 h-4 accent-brand-600" />
+              {{ roleLabel(r) }}
+            </label>
+          </div>
+        </fieldset>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showRolesModal = false">Batal</button>
+        <button type="submit" form="roles-form" class="btn btn-primary flex-1" :disabled="savingRoles">
+          {{ savingRoles ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.25s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-/* ============ ACTION BUTTONS ============ */
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.action-btn:active {
-  transform: translateY(0);
-}
-
-.action-btn-edit {
-  background: #e8f5e9;
-  color: #2E7D32;
-  border-color: #c8e6c9;
-}
-.action-btn-edit:hover {
-  background: #c8e6c9;
-}
-
-.action-btn-role {
-  background: #eef2ff;
-  color: #4338ca;
-  border-color: #e0e7ff;
-}
-.action-btn-role:hover {
-  background: #e0e7ff;
-}
-
-.action-btn-password {
-  background: #fff7ed;
-  color: #b45309;
-  border-color: #fde68a;
-}
-.action-btn-password:hover {
-  background: #fde68a;
-}
-
-.action-btn-activate {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
-.action-btn-activate:hover {
-  background: #a7f3d0;
-}
-
-.action-btn-deactivate {
-  background: #fef2f2;
-  color: #b91c1c;
-  border-color: #fecaca;
-}
-.action-btn-deactivate:hover {
-  background: #fecaca;
-}
-
-.action-btn-delete {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fca5a5;
-}
-.action-btn-delete:hover {
-  background: #fca5a5;
-  color: white;
-}
-</style>

@@ -60,33 +60,39 @@ describe('UserList', () => {
     expect(text).not.toContain('me@x')
   })
 
-  it('toggle status user inactive → memanggil activate', async () => {
+  it('aktifkan user nonaktif → langsung memanggil activate', async () => {
     userService.activate.mockResolvedValueOnce({})
     const wrapper = mount(UserList)
     await flushPromises()
-    // cari tombol "Activate" (Budi inactive)
-    const activateBtn = wrapper.findAll('button').find((b) => b.text().includes('Activate') && !b.text().includes('Deactivate'))
-    expect(activateBtn).toBeDefined()
-    await activateBtn.trigger('click')
+    await wrapper.find('button[aria-label="Aktifkan Budi"]').trigger('click')
     await flushPromises()
     expect(userService.activate).toHaveBeenCalledWith(2)
   })
 
-  it('toggle status user active → memanggil deactivate', async () => {
+  it('nonaktifkan user → dialog konfirmasi → Nonaktifkan → deactivate', async () => {
     userService.deactivate.mockResolvedValueOnce({})
-    const wrapper = mount(UserList)
+    const wrapper = mountWithConfirm(UserList)
     await flushPromises()
-    const deactivateBtn = wrapper.findAll('button').find((b) => b.text().includes('Deactivate'))
-    await deactivateBtn.trigger('click')
-    await flushPromises()
+    await wrapper.find('button[aria-label="Nonaktifkan Andi"]').trigger('click')
+    expect(await answerConfirm(wrapper, 'Nonaktifkan')).toContain('Andi')
     expect(userService.deactivate).toHaveBeenCalledWith(1)
+    wrapper.unmount()
+  })
+
+  it('nonaktifkan user → Batal → tidak ada request', async () => {
+    const wrapper = mountWithConfirm(UserList)
+    await flushPromises()
+    await wrapper.find('button[aria-label="Nonaktifkan Andi"]').trigger('click')
+    await answerConfirm(wrapper, 'Batal')
+    expect(userService.deactivate).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('hapus user → dialog konfirmasi → Hapus → remove', async () => {
     userService.remove.mockResolvedValueOnce({})
     const wrapper = mountWithConfirm(UserList)
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text().includes('Hapus')).trigger('click')
+    await wrapper.find('button[aria-label="Hapus user Andi"]').trigger('click')
     expect(await answerConfirm(wrapper, 'Hapus')).toContain('Andi')
     expect(userService.remove).toHaveBeenCalledWith(1)
     wrapper.unmount()
@@ -95,10 +101,54 @@ describe('UserList', () => {
   it('hapus user → Batal → tidak ada request hapus', async () => {
     const wrapper = mountWithConfirm(UserList)
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text().includes('Hapus')).trigger('click')
+    await wrapper.find('button[aria-label="Hapus user Andi"]').trigger('click')
     await answerConfirm(wrapper, 'Batal')
     expect(userService.remove).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+
+  it('status tampil dalam bahasa Indonesia', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Aktif')
+    expect(wrapper.text()).toContain('Nonaktif')
+    expect(wrapper.text()).not.toMatch(/\b(active|inactive|Deactivate|Activate)\b/)
+  })
+
+  it('tanpa h1 (judul di header layout) dan tanpa emoji', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.html()).not.toMatch(/\p{Extended_Pictographic}/u)
+  })
+
+  it('atur role: checkbox per role, simpan mengirim id sebagai number', async () => {
+    userService.assignRoles.mockResolvedValueOnce({})
+    const wrapper = mount(UserList)
+    await flushPromises()
+    await wrapper.find('button[aria-label="Atur role Budi"]').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.find('[role="dialog"]')
+    const boxes = dialog.findAll('input[type="checkbox"]')
+    expect(boxes.length).toBe(2)
+    expect(boxes[1].element.checked).toBe(true) // Budi = resident
+    await boxes[0].setValue(true)
+    await wrapper.find('#roles-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(userService.assignRoles).toHaveBeenCalledWith(2, [2, 1])
+  })
+
+  it('form tambah user: setiap input punya label tersambung', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text().includes('Tambah User')).trigger('click')
+    await flushPromises()
+    const inputs = wrapper.find('[role="dialog"]').findAll('input:not([type="checkbox"])')
+    expect(inputs.length).toBe(4)
+    for (const input of inputs) {
+      const id = input.attributes('id')
+      expect(wrapper.find(`label[for="${id}"]`).exists(), `label untuk #${id}`).toBe(true)
+    }
   })
 
   it('list error → tampilkan pesan', async () => {

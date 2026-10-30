@@ -62,7 +62,8 @@ describe('InventoryPage', () => {
       meta: { total: 1, totalPages: 1 }
     })
     itemTransactionService.list.mockResolvedValue({
-      data: [{ id: 1, type: 'ADD', qty: 3, itemId: 1, createdAt: '2026-04-29T00:00:00Z' }],
+      // Bentuk sesuai model ItemTransaction di backend: beforeQty / changeQty / afterQty.
+      data: [{ id: 'tx1', type: 'ADD', beforeQty: 2, changeQty: 3, afterQty: 5, itemId: 1, item: { id: 1, name: 'Sapu' }, createdAt: '2026-04-29T00:00:00Z' }],
       meta: { total: 1, totalPages: 1 }
     })
   })
@@ -91,13 +92,54 @@ describe('InventoryPage', () => {
     expect(wrapper.text()).toContain('Cleaning')
   })
 
-  it('switch ke tab Transaksi menampilkan badge tipe transaksi', async () => {
+  it('switch ke tab Transaksi: tipe dalam bahasa Indonesia, perubahan bertanda, stok sebelum → sesudah', async () => {
     const wrapper = mount(InventoryPage)
     await flushPromises()
     const txTab = wrapper.findAll('button').find((b) => b.text() === 'Transaksi')
     await txTab.trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('ADD')
+    const text = wrapper.text()
+    expect(text).toContain('Tambah')
+    expect(text).not.toContain('ADD')
+    expect(text).toContain('+3')
+    expect(text).toMatch(/2\s*→\s*5/)
+  })
+
+  it('tanpa h1 (judul di header layout) dan tanpa emoji', async () => {
+    const wrapper = mount(InventoryPage)
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.html()).not.toMatch(/\p{Extended_Pictographic}/u)
+  })
+
+  it('tab memakai role tab + aria-selected', async () => {
+    const wrapper = mount(InventoryPage)
+    await flushPromises()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((t) => t.text())).toEqual(['Item', 'Kategori', 'Transaksi'])
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('tombol aksi ikon punya aria-label yang menyebut itemnya', async () => {
+    const wrapper = mount(InventoryPage)
+    await flushPromises()
+    expect(wrapper.find('button[aria-label="Catat transaksi Sapu"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="Hapus item Sapu"]').exists()).toBe(true)
+  })
+
+  it('catat transaksi: dialog menyebut item + stok, simpan memanggil createTransaction', async () => {
+    itemService.createTransaction.mockResolvedValueOnce({})
+    const wrapper = mount(InventoryPage)
+    await flushPromises()
+    await wrapper.find('button[title="Catat transaksi"]').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.text()).toContain('Sapu')
+    expect(dialog.text()).toContain('5')
+    await wrapper.find('#tx-form-qty').setValue(4)
+    await wrapper.find('#tx-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(itemService.createTransaction).toHaveBeenCalledWith(1, { type: 'ADD', qty: 4, note: undefined })
   })
 
   it('hapus item → dialog konfirmasi → Hapus → remove', async () => {

@@ -1,5 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { Building2, Check, Pencil, Plus, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-vue-next'
+import AppToast from '@/components/AppToast.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { confirmDialog } from '@/composables/useConfirm'
 import { facilityService } from '@/services/facilityService'
 import { facilityReservationService } from '@/services/facilityReservationService'
@@ -34,6 +38,8 @@ function extractError(err, fallback = 'Terjadi kesalahan') {
 
 // ============ TABS ============
 const activeTab = ref('reservations') // reservations | facilities
+// Mobile: filter disembunyikan di balik tombol supaya daftar langsung terlihat.
+const showReservationFilters = ref(false)
 
 // ============ FACILITIES ============
 const facilities = ref([])
@@ -320,30 +326,45 @@ async function removeReservation(r) {
 async function quickUpdateStatus(r, newStatus) {
   try {
     await facilityReservationService.update(r.id, { status: newStatus })
-    showToast(`Status: ${newStatus}`)
+    showToast(newStatus === 'APPROVED' ? 'Reservasi disetujui' : 'Reservasi ditolak')
     await fetchReservations()
   } catch (err) {
-    showToast(extractError(err, 'Gagal update status'), 'error')
+    showToast(extractError(err, 'Gagal mengubah status'), 'error')
   }
 }
 
-function statusBadge(s) {
-  switch ((s || '').toUpperCase()) {
+// Nilai enum dari API tetap dikirim apa adanya; yang diterjemahkan hanya label.
+const STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Menunggu' },
+  { value: 'APPROVED', label: 'Disetujui' },
+  { value: 'REJECTED', label: 'Ditolak' },
+  { value: 'CANCELLED', label: 'Dibatalkan' },
+  { value: 'DONE', label: 'Selesai' }
+]
+
+function statusInfo(s) {
+  const key = (s || '').toUpperCase()
+  switch (key) {
     case 'APPROVED':
     case 'CONFIRMED':
-      return 'bg-green-100 text-green-700'
+      return { label: 'Disetujui', cls: 'chip-brand' }
     case 'PENDING':
-      return 'bg-yellow-100 text-yellow-800'
+      return { label: 'Menunggu', cls: 'chip-amber' }
     case 'REJECTED':
+      return { label: 'Ditolak', cls: 'chip-red' }
     case 'CANCELLED':
     case 'CANCELED':
-      return 'bg-red-100 text-red-700'
+      return { label: 'Dibatalkan', cls: 'chip-red' }
     case 'DONE':
     case 'COMPLETED':
-      return 'bg-gray-100 text-gray-600'
+      return { label: 'Selesai', cls: 'chip-gray' }
     default:
-      return 'bg-blue-100 text-blue-700'
+      return { label: key || '-', cls: 'chip-gray' }
   }
+}
+
+function isPending(r) {
+  return (r.status || '').toUpperCase() === 'PENDING'
 }
 
 function resolvedFacilityName(r) {
@@ -361,318 +382,404 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <transition name="fade-up">
-      <div
-        v-if="toast.show"
-        class="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm"
-        :class="toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
-      >{{ toast.message }}</div>
-    </transition>
+  <div class="space-y-4">
+    <AppToast :toast="toast" />
 
-    <div class="flex items-center justify-between mb-3 flex-wrap gap-3 fade-up">
-      <h1 class="text-xl font-bold text-gray-800">Fasilitas 🏛️</h1>
-      <button
-        v-if="activeTab === 'reservations' && canWriteReservation"
-        @click="openCreateReservation"
-        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-      >+ Tambah Reservasi</button>
-      <button
-        v-else-if="activeTab === 'facilities' && canWriteFacility"
-        @click="openCreateFacility"
-        class="bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-      >+ Tambah Fasilitas</button>
-    </div>
-
-    <div class="border-b border-gray-200 mb-3 fade-up" style="animation-delay: 80ms">
-      <nav class="flex gap-6">
+    <!-- Toolbar: tab + aksi utama. Judul halaman sudah ada di header layout. -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="tabs grid grid-cols-2 w-full sm:w-auto sm:inline-flex" role="tablist" aria-label="Bagian halaman fasilitas">
         <button
+          type="button"
+          role="tab"
+          class="tab"
+          :aria-selected="activeTab === 'reservations'"
           @click="activeTab = 'reservations'"
-          class="py-2 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === 'reservations' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
         >Reservasi</button>
         <button
+          type="button"
+          role="tab"
+          class="tab"
+          :aria-selected="activeTab === 'facilities'"
           @click="activeTab = 'facilities'"
-          class="py-2 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === 'facilities' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
         >Daftar Fasilitas</button>
-      </nav>
+      </div>
+      <button
+        v-if="activeTab === 'reservations' && canWriteReservation"
+        type="button"
+        class="btn btn-primary"
+        @click="openCreateReservation"
+      >
+        <Plus class="w-4 h-4" aria-hidden="true" />
+        Tambah Reservasi
+      </button>
+      <button
+        v-else-if="activeTab === 'facilities' && canWriteFacility"
+        type="button"
+        class="btn btn-primary"
+        @click="openCreateFacility"
+      >
+        <Plus class="w-4 h-4" aria-hidden="true" />
+        Tambah Fasilitas
+      </button>
     </div>
 
-    <!-- ============ TAB: RESERVATIONS ============ -->
-    <div v-if="activeTab === 'reservations'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
-      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-        <input v-model="reservationSearch" type="text" placeholder="Cari judul..." class="col-span-2 sm:col-auto sm:flex-1 sm:min-w-[180px] w-full min-w-0 px-3 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <select v-model="reservationStatus" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="">Semua status</option>
-          <option value="PENDING">PENDING</option>
-          <option value="APPROVED">APPROVED</option>
-          <option value="REJECTED">REJECTED</option>
-          <option value="CANCELLED">CANCELLED</option>
-          <option value="DONE">DONE</option>
-        </select>
-        <select v-model="reservationFacilityId" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="">Semua fasilitas</option>
-          <option v-for="f in allFacilities" :key="f.id" :value="f.id">{{ f.name }}</option>
-        </select>
-        <input v-model="reservationFrom" type="date" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <input v-model="reservationTo" type="date" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <select v-model="reservationSortOrder" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
-        <button @click="applyReservationDateFilter" class="col-span-2 sm:col-auto w-full sm:w-auto px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-green-700">Filter</button>
-      </div>
-
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Judul</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Fasilitas</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Mulai</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Selesai</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-              <th v-if="canWriteReservation" class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingReservations"><td :colspan="canWriteReservation ? 6 : 5" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td></tr>
-            <tr v-else-if="!reservations.length"><td :colspan="canWriteReservation ? 6 : 5" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada reservasi.</td></tr>
-            <tr v-else v-for="r in reservations" :key="r.id" class="hover:bg-gray-50">
-              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium" :title="r.description || ''">{{ r.title }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ resolvedFacilityName(r) }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(r.startDateTime) }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 whitespace-nowrap">{{ formatDate(r.endDateTime) }}</td>
-              <td class="px-3 py-1.5 whitespace-nowrap">
-                <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="statusBadge(r.status)">{{ r.status || '-' }}</span>
-              </td>
-              <td v-if="canWriteReservation" class="px-3 py-1.5">
-                <div class="flex flex-wrap gap-1">
-                  <button v-if="(r.status || '').toUpperCase() === 'PENDING'" @click="quickUpdateStatus(r, 'APPROVED')" class="action-btn action-btn-approve" title="Approve">✓</button>
-                  <button v-if="(r.status || '').toUpperCase() === 'PENDING'" @click="quickUpdateStatus(r, 'REJECTED')" class="action-btn action-btn-reject" title="Reject">✗</button>
-                  <button @click="openEditReservation(r)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
-                  <button @click="removeReservation(r)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingReservations" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-        <div v-else-if="!reservations.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada reservasi.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="r in reservations" :key="r.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ r.title }}</div>
-                <div class="mt-0.5 text-xs text-primary truncate">🏛️ {{ resolvedFacilityName(r) }}</div>
-              </div>
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusBadge(r.status)">{{ r.status || '-' }}</span>
-            </div>
-            <div class="mt-2 grid grid-cols-2 gap-1 text-xs text-gray-500">
-              <div><span class="text-gray-400">Mulai</span><br /><span class="text-gray-700">{{ formatDate(r.startDateTime) }}</span></div>
-              <div><span class="text-gray-400">Selesai</span><br /><span class="text-gray-700">{{ formatDate(r.endDateTime) }}</span></div>
-            </div>
-            <div v-if="r.description" class="mt-1 text-xs text-gray-500 line-clamp-2">{{ r.description }}</div>
-            <div v-if="canWriteReservation" class="mt-2 flex flex-wrap gap-1">
-              <button v-if="(r.status || '').toUpperCase() === 'PENDING'" @click="quickUpdateStatus(r, 'APPROVED')" class="action-btn action-btn-approve" title="Approve">✓ Approve</button>
-              <button v-if="(r.status || '').toUpperCase() === 'PENDING'" @click="quickUpdateStatus(r, 'REJECTED')" class="action-btn action-btn-reject" title="Reject">✗ Reject</button>
-              <button @click="openEditReservation(r)" class="action-btn action-btn-edit" title="Ubah">✏️ Ubah</button>
-              <button @click="removeReservation(r)" class="action-btn action-btn-delete" title="Hapus">🗑️ Hapus</button>
-            </div>
-          </li>
-        </ul>
-      </div>
-
-      <div v-if="!loadingReservations && reservations.length" class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <div>Halaman {{ reservationPage }} dari {{ reservationTotalPages }}</div>
-        <div class="flex gap-2">
-          <button :disabled="reservationPage <= 1" @click="reservationPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-          <button :disabled="reservationPage >= reservationTotalPages" @click="reservationPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+    <!-- ============ TAB: RESERVASI ============ -->
+    <section v-if="activeTab === 'reservations'" class="card overflow-hidden" aria-label="Daftar reservasi">
+      <div class="p-4 border-b border-gray-200 space-y-3">
+        <div>
+          <label for="reservation-search" class="field-label text-xs">Cari</label>
+          <input
+            id="reservation-search"
+            v-model="reservationSearch"
+            type="search"
+            placeholder="Judul reservasi"
+            class="field"
+          />
         </div>
-      </div>
-    </div>
-
-    <!-- ============ TAB: FACILITIES ============ -->
-    <div v-else class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-up" style="animation-delay: 150ms">
-      <div class="px-3 py-2 border-b border-gray-200 grid grid-cols-2 gap-2 items-center sm:flex sm:flex-wrap">
-        <input v-model="facilitySearch" type="text" placeholder="Cari nama fasilitas..." class="col-span-2 sm:col-auto sm:flex-1 sm:min-w-[180px] w-full min-w-0 px-3 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary" />
-        <select v-model="facilitySortBy" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="createdAt">Urut: Dibuat</option>
-          <option value="name">Urut: Nama</option>
-        </select>
-        <select v-model="facilitySortOrder" class="w-full sm:w-auto min-w-0 px-2 py-1 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
-      </div>
-
-      <!-- DESKTOP table -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Nama</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Deskripsi</th>
-              <th class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Catatan</th>
-              <th v-if="canWriteFacility" class="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Aksi</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-if="loadingFacilities"><td :colspan="canWriteFacility ? 4 : 3" class="px-3 py-4 text-center text-gray-400 text-sm">Memuat...</td></tr>
-            <tr v-else-if="!facilities.length"><td :colspan="canWriteFacility ? 4 : 3" class="px-3 py-4 text-center text-gray-400 text-sm">Belum ada fasilitas.</td></tr>
-            <tr v-else v-for="f in facilities" :key="f.id" class="hover:bg-gray-50">
-              <td class="px-3 py-1.5 text-sm text-gray-800 font-medium whitespace-nowrap">{{ f.name }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-md truncate" :title="f.description || ''">{{ f.description || '-' }}</td>
-              <td class="px-3 py-1.5 text-sm text-gray-500 max-w-xs truncate" :title="f.note || ''">{{ f.note || '-' }}</td>
-              <td v-if="canWriteFacility" class="px-3 py-1.5">
-                <div class="flex flex-wrap gap-1">
-                  <button @click="openEditFacility(f)" class="action-btn action-btn-edit" title="Ubah">✏️</button>
-                  <button @click="removeFacility(f)" class="action-btn action-btn-delete" title="Hapus">🗑️</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- MOBILE card list -->
-      <div class="md:hidden">
-        <div v-if="loadingFacilities" class="px-3 py-6 text-center text-gray-400 text-sm">Memuat...</div>
-        <div v-else-if="!facilities.length" class="px-3 py-6 text-center text-gray-400 text-sm">Belum ada fasilitas.</div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="f in facilities" :key="f.id" class="px-3 py-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-800 truncate">{{ f.name }}</div>
-                <div v-if="f.description" class="mt-0.5 text-xs text-gray-600 line-clamp-2">{{ f.description }}</div>
-                <div v-if="f.note" class="mt-1 text-xs text-gray-400 italic line-clamp-2">📝 {{ f.note }}</div>
-              </div>
-            </div>
-            <div v-if="canWriteFacility" class="mt-2 flex flex-wrap gap-1">
-              <button @click="openEditFacility(f)" class="action-btn action-btn-edit" title="Ubah">✏️ Ubah</button>
-              <button @click="removeFacility(f)" class="action-btn action-btn-delete" title="Hapus">🗑️ Hapus</button>
-            </div>
-          </li>
-        </ul>
-      </div>
-
-      <div v-if="!loadingFacilities && facilities.length" class="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <div>Halaman {{ facilityPage }} dari {{ facilityTotalPages }}</div>
-        <div class="flex gap-2">
-          <button :disabled="facilityPage <= 1" @click="facilityPage--" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
-          <button :disabled="facilityPage >= facilityTotalPages" @click="facilityPage++" class="px-2 py-0.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next ›</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============ FACILITY MODAL ============ -->
-    <div v-if="showFacilityModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" @click.self="showFacilityModal = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">{{ editingFacility ? 'Ubah Fasilitas' : 'Tambah Fasilitas' }}</h3>
-        <form @submit.prevent="saveFacility" class="space-y-4">
-          <div v-if="facilityFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ facilityFormError }}</div>
+        <button
+          type="button"
+          class="btn btn-secondary w-full md:hidden"
+          :aria-expanded="showReservationFilters"
+          aria-controls="reservation-filters"
+          @click="showReservationFilters = !showReservationFilters"
+        >
+          <SlidersHorizontal class="w-4 h-4" aria-hidden="true" />
+          {{ showReservationFilters ? 'Sembunyikan filter' : 'Filter & urutan' }}
+        </button>
+        <div
+          id="reservation-filters"
+          class="gap-3 grid-cols-2 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto] items-end"
+          :class="showReservationFilters ? 'grid' : 'hidden md:grid'"
+        >
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input v-model="facilityForm.name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
+            <label for="reservation-status" class="field-label text-xs">Status</label>
+            <select id="reservation-status" v-model="reservationStatus" class="field">
+              <option value="">Semua status</option>
+              <option v-for="o in STATUS_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-            <textarea v-model="facilityForm.description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
-            <textarea v-model="facilityForm.note" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showFacilityModal = false" class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
-            <button type="submit" :disabled="savingFacility" class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{{ savingFacility ? 'Menyimpan...' : 'Simpan' }}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- ============ RESERVATION MODAL ============ -->
-    <div v-if="showReservationModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" @click.self="showReservationModal = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">{{ editingReservation ? 'Ubah Reservasi' : 'Tambah Reservasi' }}</h3>
-        <form @submit.prevent="saveReservation" class="space-y-4">
-          <div v-if="reservationFormError" class="bg-red-50 text-red-600 text-sm p-3 rounded-lg">{{ reservationFormError }}</div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Fasilitas</label>
-            <select v-model="reservationForm.facilityId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none">
-              <option value="" disabled>Pilih fasilitas</option>
+            <label for="reservation-facility" class="field-label text-xs">Fasilitas</label>
+            <select id="reservation-facility" v-model="reservationFacilityId" class="field">
+              <option value="">Semua fasilitas</option>
               <option v-for="f in allFacilities" :key="f.id" :value="f.id">{{ f.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Judul</label>
-            <input v-model="reservationForm.title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
+            <label for="reservation-from" class="field-label text-xs">Dari tanggal</label>
+            <input id="reservation-from" v-model="reservationFrom" type="date" class="field" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-            <textarea v-model="reservationForm.description" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
+            <label for="reservation-to" class="field-label text-xs">Sampai tanggal</label>
+            <input id="reservation-to" v-model="reservationTo" type="date" class="field" />
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Mulai</label>
-              <input v-model="reservationForm.startDateTime" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Selesai</label>
-              <input v-model="reservationForm.endDateTime" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none" />
-            </div>
-          </div>
-          <div v-if="editingReservation">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select v-model="reservationForm.status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none">
-              <option value="">(tidak diubah)</option>
-              <option value="PENDING">PENDING</option>
-              <option value="APPROVED">APPROVED</option>
-              <option value="REJECTED">REJECTED</option>
-              <option value="CANCELLED">CANCELLED</option>
-              <option value="DONE">DONE</option>
+          <div>
+            <label for="reservation-order" class="field-label text-xs">Urutan</label>
+            <select id="reservation-order" v-model="reservationSortOrder" class="field">
+              <option value="desc">Terbaru</option>
+              <option value="asc">Terlama</option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
-            <textarea v-model="reservationForm.note" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"></textarea>
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showReservationModal = false" class="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
-            <button type="submit" :disabled="savingReservation" class="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{{ savingReservation ? 'Menyimpan...' : 'Simpan' }}</button>
-          </div>
-        </form>
+          <button type="button" class="btn btn-primary col-span-2 lg:col-span-1" @click="applyReservationDateFilter">
+            Terapkan
+          </button>
+        </div>
       </div>
-    </div>
+
+      <div v-if="loadingReservations" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="!reservations.length" class="empty-state">Belum ada reservasi.</div>
+      <template v-else>
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-ink-muted">
+              <tr>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Judul</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Fasilitas</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Mulai</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Selesai</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Status</th>
+                <th v-if="canWriteReservation" scope="col" class="text-right font-medium px-4 py-2.5"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="r in reservations" :key="r.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-ink max-w-xs truncate" :title="r.description || ''">{{ r.title }}</td>
+                <td class="px-4 py-2 text-ink-muted whitespace-nowrap">{{ resolvedFacilityName(r) }}</td>
+                <td class="px-4 py-2 text-ink-muted whitespace-nowrap tabular-nums">{{ formatDate(r.startDateTime) }}</td>
+                <td class="px-4 py-2 text-ink-muted whitespace-nowrap tabular-nums">{{ formatDate(r.endDateTime) }}</td>
+                <td class="px-4 py-2"><span class="chip" :class="statusInfo(r.status).cls">{{ statusInfo(r.status).label }}</span></td>
+                <td v-if="canWriteReservation" class="px-4 py-2">
+                  <div class="flex justify-end gap-1">
+                    <template v-if="isPending(r)">
+                      <button
+                        type="button"
+                        class="icon-btn text-brand-700"
+                        title="Setujui"
+                        :aria-label="`Setujui reservasi ${r.title}`"
+                        @click="quickUpdateStatus(r, 'APPROVED')"
+                      ><Check class="w-4 h-4" aria-hidden="true" /></button>
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-danger"
+                        title="Tolak"
+                        :aria-label="`Tolak reservasi ${r.title}`"
+                        @click="quickUpdateStatus(r, 'REJECTED')"
+                      ><X class="w-4 h-4" aria-hidden="true" /></button>
+                    </template>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Ubah"
+                      :aria-label="`Ubah reservasi ${r.title}`"
+                      @click="openEditReservation(r)"
+                    ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn-danger"
+                      title="Hapus"
+                      :aria-label="`Hapus reservasi ${r.title}`"
+                      @click="removeReservation(r)"
+                    ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MOBILE list -->
+        <ul class="md:hidden divide-y divide-gray-200">
+          <li v-for="r in reservations" :key="r.id" class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-ink truncate">{{ r.title }}</p>
+                <p class="mt-0.5 flex items-center gap-1.5 text-sm text-brand-700 truncate">
+                  <Building2 class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  {{ resolvedFacilityName(r) }}
+                </p>
+              </div>
+              <span class="chip" :class="statusInfo(r.status).cls">{{ statusInfo(r.status).label }}</span>
+            </div>
+            <dl class="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt class="text-xs text-ink-muted">Mulai</dt>
+                <dd class="text-ink tabular-nums">{{ formatDate(r.startDateTime) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-ink-muted">Selesai</dt>
+                <dd class="text-ink tabular-nums">{{ formatDate(r.endDateTime) }}</dd>
+              </div>
+            </dl>
+            <p v-if="r.description" class="mt-2 text-sm text-ink-muted line-clamp-2">{{ r.description }}</p>
+            <div v-if="canWriteReservation" class="mt-3 flex items-center gap-2">
+              <template v-if="isPending(r)">
+                <button type="button" class="btn btn-primary flex-1" @click="quickUpdateStatus(r, 'APPROVED')">
+                  <Check class="w-4 h-4" aria-hidden="true" />
+                  Setujui
+                </button>
+                <button type="button" class="btn btn-secondary flex-1" @click="quickUpdateStatus(r, 'REJECTED')">
+                  <X class="w-4 h-4" aria-hidden="true" />
+                  Tolak
+                </button>
+              </template>
+              <div class="flex gap-1 ml-auto">
+                <button
+                  type="button"
+                  class="icon-btn w-11 h-11"
+                  :aria-label="`Ubah reservasi ${r.title}`"
+                  @click="openEditReservation(r)"
+                ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-danger w-11 h-11"
+                  :aria-label="`Hapus reservasi ${r.title}`"
+                  @click="removeReservation(r)"
+                ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+              </div>
+            </div>
+          </li>
+        </ul>
+
+        <PaginationBar v-model:page="reservationPage" :total-pages="reservationTotalPages" />
+      </template>
+    </section>
+
+    <!-- ============ TAB: DAFTAR FASILITAS ============ -->
+    <section v-else class="card overflow-hidden" aria-label="Daftar fasilitas">
+      <div class="p-4 border-b border-gray-200 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_auto_auto] items-end">
+        <div class="col-span-2 sm:col-span-1">
+          <label for="facility-search" class="field-label text-xs">Cari</label>
+          <input
+            id="facility-search"
+            v-model="facilitySearch"
+            type="search"
+            placeholder="Nama fasilitas"
+            class="field"
+          />
+        </div>
+        <div>
+          <label for="facility-sort" class="field-label text-xs">Urutkan</label>
+          <select id="facility-sort" v-model="facilitySortBy" class="field">
+            <option value="createdAt">Dibuat</option>
+            <option value="name">Nama</option>
+          </select>
+        </div>
+        <div>
+          <label for="facility-order" class="field-label text-xs">Arah</label>
+          <select id="facility-order" v-model="facilitySortOrder" class="field">
+            <option value="desc">Terbaru</option>
+            <option value="asc">Terlama</option>
+          </select>
+        </div>
+      </div>
+
+      <div v-if="loadingFacilities" class="empty-state" aria-busy="true">Memuat...</div>
+      <div v-else-if="!facilities.length" class="empty-state">Belum ada fasilitas.</div>
+      <template v-else>
+        <!-- DESKTOP table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs text-ink-muted">
+              <tr>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Nama</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Deskripsi</th>
+                <th scope="col" class="text-left font-medium px-4 py-2.5">Catatan</th>
+                <th v-if="canWriteFacility" scope="col" class="text-right font-medium px-4 py-2.5"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="f in facilities" :key="f.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-ink whitespace-nowrap">{{ f.name }}</td>
+                <td class="px-4 py-2 text-ink-muted max-w-md truncate" :title="f.description || ''">{{ f.description || '-' }}</td>
+                <td class="px-4 py-2 text-ink-muted max-w-xs truncate" :title="f.note || ''">{{ f.note || '-' }}</td>
+                <td v-if="canWriteFacility" class="px-4 py-2">
+                  <div class="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Ubah"
+                      :aria-label="`Ubah fasilitas ${f.name}`"
+                      @click="openEditFacility(f)"
+                    ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn-danger"
+                      title="Hapus"
+                      :aria-label="`Hapus fasilitas ${f.name}`"
+                      @click="removeFacility(f)"
+                    ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MOBILE list -->
+        <ul class="md:hidden divide-y divide-gray-200">
+          <li v-for="f in facilities" :key="f.id" class="flex items-start gap-3 p-4">
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-ink truncate">{{ f.name }}</p>
+              <p v-if="f.description" class="mt-0.5 text-sm text-ink-muted line-clamp-2">{{ f.description }}</p>
+              <p v-if="f.note" class="mt-1 flex items-start gap-1.5 text-sm text-ink-muted">
+                <StickyNote class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                <span class="line-clamp-2">{{ f.note }}</span>
+              </p>
+            </div>
+            <div v-if="canWriteFacility" class="flex gap-1 -mr-2 -mt-2">
+              <button
+                type="button"
+                class="icon-btn w-11 h-11"
+                :aria-label="`Ubah fasilitas ${f.name}`"
+                @click="openEditFacility(f)"
+              ><Pencil class="w-4 h-4" aria-hidden="true" /></button>
+              <button
+                type="button"
+                class="icon-btn icon-btn-danger w-11 h-11"
+                :aria-label="`Hapus fasilitas ${f.name}`"
+                @click="removeFacility(f)"
+              ><Trash2 class="w-4 h-4" aria-hidden="true" /></button>
+            </div>
+          </li>
+        </ul>
+
+        <PaginationBar v-model:page="facilityPage" :total-pages="facilityTotalPages" />
+      </template>
+    </section>
+
+    <!-- ============ FACILITY MODAL ============ -->
+    <BaseModal v-model:open="showFacilityModal" :title="editingFacility ? 'Ubah Fasilitas' : 'Tambah Fasilitas'">
+      <form id="facility-form" class="space-y-4" @submit.prevent="saveFacility">
+        <p v-if="facilityFormError" class="form-error" role="alert">{{ facilityFormError }}</p>
+        <div>
+          <label for="facility-form-name" class="field-label">Nama</label>
+          <input id="facility-form-name" v-model="facilityForm.name" type="text" required autocomplete="off" class="field" />
+        </div>
+        <div>
+          <label for="facility-form-desc" class="field-label">Deskripsi</label>
+          <textarea id="facility-form-desc" v-model="facilityForm.description" rows="3" class="field"></textarea>
+        </div>
+        <div>
+          <label for="facility-form-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="facility-form-note" v-model="facilityForm.note" rows="2" class="field"></textarea>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showFacilityModal = false">Batal</button>
+        <button type="submit" form="facility-form" class="btn btn-primary flex-1" :disabled="savingFacility">
+          {{ savingFacility ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
+
+    <!-- ============ RESERVATION MODAL ============ -->
+    <BaseModal v-model:open="showReservationModal" :title="editingReservation ? 'Ubah Reservasi' : 'Tambah Reservasi'">
+      <form id="reservation-form" class="space-y-4" @submit.prevent="saveReservation">
+        <p v-if="reservationFormError" class="form-error" role="alert">{{ reservationFormError }}</p>
+        <div>
+          <label for="reservation-form-facility" class="field-label">Fasilitas</label>
+          <select id="reservation-form-facility" v-model="reservationForm.facilityId" required class="field">
+            <option value="" disabled>Pilih fasilitas</option>
+            <option v-for="f in allFacilities" :key="f.id" :value="f.id">{{ f.name }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="reservation-form-title" class="field-label">Judul</label>
+          <input id="reservation-form-title" v-model="reservationForm.title" type="text" required autocomplete="off" class="field" />
+        </div>
+        <div>
+          <label for="reservation-form-desc" class="field-label">Deskripsi <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="reservation-form-desc" v-model="reservationForm.description" rows="2" class="field"></textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
+          <div>
+            <label for="reservation-form-start" class="field-label">Mulai</label>
+            <input id="reservation-form-start" v-model="reservationForm.startDateTime" type="datetime-local" required class="field" />
+          </div>
+          <div>
+            <label for="reservation-form-end" class="field-label">Selesai</label>
+            <input id="reservation-form-end" v-model="reservationForm.endDateTime" type="datetime-local" required class="field" />
+          </div>
+        </div>
+        <div v-if="editingReservation">
+          <label for="reservation-form-status" class="field-label">Status</label>
+          <select id="reservation-form-status" v-model="reservationForm.status" class="field">
+            <option value="">(tidak diubah)</option>
+            <option v-for="o in STATUS_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="reservation-form-note" class="field-label">Catatan <span class="font-normal text-ink-muted">(opsional)</span></label>
+          <textarea id="reservation-form-note" v-model="reservationForm.note" rows="2" class="field"></textarea>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary flex-1" @click="showReservationModal = false">Batal</button>
+        <button type="submit" form="reservation-form" class="btn btn-primary flex-1" :disabled="savingReservation">
+          {{ savingReservation ? 'Menyimpan...' : 'Simpan' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
-
-<style scoped>
-.fade-up { opacity: 0; transform: translateY(16px); animation: fadeUp 0.5s ease forwards; }
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
-.fade-up-enter-active, .fade-up-leave-active { transition: all 0.25s ease; }
-.fade-up-enter-from, .fade-up-leave-to { opacity: 0; transform: translateY(-6px); }
-
-.action-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 10px; border-radius: 8px;
-  font-size: 0.72rem; font-weight: 600;
-  border: 1px solid transparent; cursor: pointer;
-  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-}
-.action-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-.action-btn-edit { background: #e8f5e9; color: #2E7D32; border-color: #c8e6c9; }
-.action-btn-edit:hover { background: #c8e6c9; }
-.action-btn-approve { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
-.action-btn-approve:hover { background: #bbf7d0; }
-.action-btn-reject { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.action-btn-reject:hover { background: #fca5a5; color: white; }
-.action-btn-delete { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.action-btn-delete:hover { background: #fca5a5; color: white; }
-</style>
