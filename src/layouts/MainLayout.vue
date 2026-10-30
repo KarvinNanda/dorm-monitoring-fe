@@ -78,14 +78,22 @@ const push = usePushNotifications()
 const pushStatus = push.status
 const pushBusy = ref(false)
 const pushDismissed = ref(false)
-// Petunjuk buka blokir: sekali ditutup, tidak muncul lagi di browser ini.
-const BLOCKED_HINT_KEY = 'push-blocked-hint-dismissed'
-const blockedHintDismissed = ref(readFlag(BLOCKED_HINT_KEY))
-const showPushBanner = computed(() =>
-  pushStatus.value === 'denied'
-    ? !blockedHintDismissed.value
-    : pushStatus.value === 'default' && !pushDismissed.value
+// Petunjuk yang tidak bisa diselesaikan dari app (blokir browser, iPhone di luar
+// Layar Utama): sekali ditutup, tidak muncul lagi di browser ini.
+const HINT_KEYS = {
+  denied: 'push-blocked-hint-dismissed',
+  'needs-home-screen': 'push-home-screen-hint-dismissed'
+}
+const hintsDismissed = ref(
+  Object.fromEntries(Object.entries(HINT_KEYS).map(([status, key]) => [status, readFlag(key)]))
 )
+const pushBannerVariant = computed(
+  () => ({ default: 'enable', denied: 'blocked', 'needs-home-screen': 'home-screen' })[pushStatus.value]
+)
+const showPushBanner = computed(() => {
+  if (pushStatus.value === 'default') return !pushDismissed.value
+  return pushStatus.value in HINT_KEYS && !hintsDismissed.value[pushStatus.value]
+})
 
 function readFlag(key) {
   try {
@@ -96,13 +104,14 @@ function readFlag(key) {
 }
 
 function dismissPushBanner() {
-  if (pushStatus.value !== 'denied') {
+  const key = HINT_KEYS[pushStatus.value]
+  if (!key) {
     pushDismissed.value = true
     return
   }
-  blockedHintDismissed.value = true
+  hintsDismissed.value[pushStatus.value] = true
   try {
-    localStorage.setItem(BLOCKED_HINT_KEY, '1')
+    localStorage.setItem(key, '1')
   } catch {}
 }
 
@@ -213,7 +222,7 @@ async function handleLogout() {
       <main class="flex-1 w-full max-w-6xl mx-auto px-4 pt-4 pb-28 md:px-6 md:py-6">
         <PushPermissionBanner
           v-if="showPushBanner"
-          :blocked="pushStatus === 'denied'"
+          :variant="pushBannerVariant"
           :busy="pushBusy"
           @enable="enablePush"
           @dismiss="dismissPushBanner"

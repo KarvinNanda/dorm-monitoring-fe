@@ -117,7 +117,7 @@ describe('api axios instance', () => {
   })
 
   describe('response interceptor — 401 dengan refresh token', () => {
-    it('refresh sukses → setTokens dipanggil dengan payload baru', async () => {
+    it('refresh sukses → setTokens token baru, request asli diulang dengan Authorization baru', async () => {
       const store = useAuthStore()
       store.setTokens('old-access', 'refresh-token')
       const setTokensSpy = vi.spyOn(store, 'setTokens')
@@ -126,24 +126,31 @@ describe('api axios instance', () => {
       const postSpy = vi.spyOn(axiosDefault, 'post').mockResolvedValueOnce({
         data: { accessToken: 'new-access', refreshToken: 'new-refresh' }
       })
-      // Mock retry request (api(originalRequest)) agar tidak hit network.
-      // Retry via adapter: kita intercept dengan meng-override originalRequest
-      // lewat spyOn api default instance request method.
-      const apiRequestSpy = vi.spyOn(api, 'request').mockResolvedValue({ data: 'retried' })
+      // Retry memakai api(originalRequest), yang tidak lewat api.request.
+      // Mock di level adapter supaya tidak ada request HTTP sungguhan (issue #11).
+      const originalAdapter = api.defaults.adapter
+      const adapter = vi.fn(async (config) => ({ data: 'retried', status: 200, statusText: 'OK', headers: {}, config }))
+      api.defaults.adapter = adapter
 
-      const handler = api.interceptors.response.handlers[0].rejected
-      const originalReq = { url: '/user', headers: {} }
-      const err = { response: { status: 401 }, config: originalReq }
+      try {
+        const handler = api.interceptors.response.handlers[0].rejected
+        const originalReq = { url: '/user', headers: {} }
+        const err = { response: { status: 401 }, config: originalReq }
 
-      await handler(err).catch(() => {})
+        const result = await handler(err)
 
-      expect(postSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/auth/refresh'),
-        { refreshToken: 'refresh-token' }
-      )
-      // setTokens dipanggil dengan token baru (bukti refresh flow berjalan)
-      expect(setTokensSpy).toHaveBeenCalledWith('new-access', 'new-refresh')
-      apiRequestSpy.mockRestore()
+        expect(postSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/auth/refresh'),
+          { refreshToken: 'refresh-token' }
+        )
+        expect(setTokensSpy).toHaveBeenCalledWith('new-access', 'new-refresh')
+        expect(adapter).toHaveBeenCalledTimes(1)
+        expect(adapter.mock.calls[0][0].url).toBe('/user')
+        expect(adapter.mock.calls[0][0].headers.Authorization).toBe('Bearer new-access')
+        expect(result.data).toBe('retried')
+      } finally {
+        api.defaults.adapter = originalAdapter
+      }
     })
 
     it('refresh gagal → clearAuth + redirect /login', async () => {
