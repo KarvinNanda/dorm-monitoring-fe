@@ -143,6 +143,9 @@
   .chip-gray {
     @apply bg-gray-100 text-gray-700;
   }
+  .chip-red {
+    @apply bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300;
+  }
 
   /* Segmented tabs. */
   .tabs {
