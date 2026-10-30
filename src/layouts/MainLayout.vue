@@ -35,7 +35,7 @@ const menuItems = computed(() => {
     { label: 'Absensi', path: '/absen', icon: Clock, roles: ['admin', 'resident'] },
     { label: 'Tamu', path: '/tamu', icon: UsersRound, roles: ['admin', 'receptionist'] },
     { label: 'Inventaris', path: '/inventory', icon: Package, roles: ['admin', 'receptionist', 'resident'] },
-    { label: 'Fasilitas', path: '/facility', icon: Building2, roles: ['admin'] },
+    { label: 'Fasilitas', path: '/facility', icon: Building2, roles: ['admin', 'receptionist', 'resident'] },
     { label: 'Users', path: '/users', icon: Users, roles: ['admin'] }
   ]
   return items.filter((i) => !i.roles || authStore.hasAnyRole(i.roles))

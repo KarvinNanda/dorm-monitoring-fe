@@ -75,27 +75,27 @@ describe('MainLayout — menu visibility per role', () => {
     expect(wrapper.text()).toContain('Fasilitas')
   })
 
-  it('resident: lihat Dashboard, Absensi, Inventaris — tidak lihat Tamu/Fasilitas/Users', () => {
+  it('resident: lihat Dashboard, Absensi, Inventaris, Fasilitas — tidak lihat Tamu/Users', () => {
     loginAs('resident')
     const wrapper = mount(MainLayout, mountOpts)
     const text = wrapper.text()
     expect(text).toContain('Dashboard')
     expect(text).toContain('Absensi')
     expect(text).toContain('Inventaris')
+    expect(text).toContain('Fasilitas')
     expect(text).not.toContain('Tamu')
-    expect(text).not.toContain('Fasilitas')
     expect(text).not.toContain('Users')
   })
 
-  it('receptionist: lihat Dashboard, Tamu, Inventaris — tidak lihat Absensi/Fasilitas/Users', () => {
+  it('receptionist: lihat Dashboard, Tamu, Inventaris, Fasilitas — tidak lihat Absensi/Users', () => {
     loginAs('receptionist')
     const wrapper = mount(MainLayout, mountOpts)
     const text = wrapper.text()
     expect(text).toContain('Dashboard')
     expect(text).toContain('Tamu')
     expect(text).toContain('Inventaris')
+    expect(text).toContain('Fasilitas')
     expect(text).not.toContain('Absensi')
-    expect(text).not.toContain('Fasilitas')
     expect(text).not.toContain('Users')
   })
 
@@ -173,11 +173,11 @@ describe('MainLayout — menu visibility per role', () => {
     expect(sheet.text()).toContain('Keluar')
   })
 
-  it('resident (3 menu) → semua menu muat di bottom nav, sheet hanya Profil + Keluar', async () => {
+  it('resident (4 menu) → semua menu muat di bottom nav, sheet hanya Profil + Keluar', async () => {
     loginAs('resident')
     const wrapper = mount(MainLayout, mountOpts)
     const bottomNav = wrapper.findAll('nav').find((n) => n.text().includes('Lainnya'))
-    expect(bottomNav.findAll('a').map((t) => t.text())).toEqual(['Dashboard', 'Absensi', 'Inventaris'])
+    expect(bottomNav.findAll('a').map((t) => t.text())).toEqual(['Dashboard', 'Absensi', 'Inventaris', 'Fasilitas'])
     await wrapper.findAll('button').find((b) => b.text().includes('Lainnya')).trigger('click')
     const sheetLinks = wrapper.find('#more-sheet').findAll('a').map((a) => a.text())
     expect(sheetLinks).toEqual(['Profil Saya'])

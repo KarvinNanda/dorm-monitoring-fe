@@ -36,9 +36,22 @@ describe('router routes', () => {
     expect(dash.meta?.roles).toBeUndefined()
   })
 
-  it('rute Tamu mengizinkan receptionist (route guard lebih longgar dari menu)', () => {
+  // Role per rute mengikuti matriks otorisasi backend. Rute yang lebih
+  // longgar dari backend membuka halaman yang isinya hanya error 403.
+  it('rute Tamu hanya untuk admin/receptionist (backend /guest, /guest-visit)', () => {
     const tamu = all.find((r) => r.name === 'Tamu')
-    expect(tamu.meta?.roles).toContain('receptionist')
+    expect(tamu.meta?.roles).toEqual(['admin', 'receptionist'])
+  })
+
+  it('rute Absen hanya untuk admin/resident (backend /check-log)', () => {
+    const absen = all.find((r) => r.name === 'Absen')
+    expect(absen.meta?.roles).toEqual(['admin', 'resident'])
+  })
+
+  it('tidak ada rute yang memakai role "guest" (role itu tidak ada di backend)', () => {
+    for (const r of all) {
+      expect(r.meta?.roles ?? [], `route ${r.name}`).not.toContain('guest')
+    }
   })
 
   it('rute Users dibatasi role admin', () => {
@@ -57,11 +70,12 @@ describe('router routes', () => {
     )
   })
 
-  it('rute Facility ada dan butuh auth (semua role)', () => {
+  it('rute Facility ada, butuh auth, terbuka untuk admin/receptionist/resident (read-only non-admin)', () => {
     const fac = all.find((r) => r.name === 'Facility')
     expect(fac).toBeDefined()
     expect(fac.fullPath).toBe('/facility')
     expect(fac.meta?.requiresAuth).toBe(true)
+    expect(fac.meta?.roles).toEqual(['admin', 'receptionist', 'resident'])
   })
 
   it('catch-all redirect ke /dashboard', () => {
