@@ -35,13 +35,15 @@ const routes = [
         path: 'absen',
         name: 'Absen',
         component: () => import('@/modules/absen/views/AbsenPage.vue'),
-        meta: { requiresAuth: true, roles: ['admin', 'resident', 'guest'] }
+        // Backend /check-log: in/out/status hanya Resident, riwayat semua user Admin.
+        meta: { requiresAuth: true, roles: ['admin', 'resident'] }
       },
       {
         path: 'tamu',
         name: 'Tamu',
         component: () => import('@/modules/tamu/views/TamuPage.vue'),
-        meta: { requiresAuth: true, roles: ['admin', 'resident', 'receptionist', 'guest'] }
+        // Backend /guest dan /guest-visit: Admin dan Receptionist.
+        meta: { requiresAuth: true, roles: ['admin', 'receptionist'] }
       },
       {
         path: 'users',
@@ -59,7 +61,8 @@ const routes = [
         path: 'facility',
         name: 'Facility',
         component: () => import('@/modules/facility/views/FacilityPage.vue'),
-        meta: { requiresAuth: true }
+        // Baca: semua role. Tulis: hanya admin (tombol aksi disembunyikan di halaman).
+        meta: { requiresAuth: true, roles: ['admin', 'receptionist', 'resident'] }
       },
       {
         path: 'profile',
