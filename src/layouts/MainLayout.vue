@@ -19,6 +19,7 @@ import { authService } from '@/services/authService'
 import { userDeviceService } from '@/services/userDeviceService'
 import { getCurrentPlayerId } from '@/utils/oneSignal'
 import NotificationBell from '@/components/NotificationBell.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 import logoUrl from '@/assets/logo-3.png'
 
 const authStore = useAuthStore()
@@ -91,9 +92,9 @@ async function handleLogout() {
 <template>
   <div class="min-h-dvh bg-surface md:flex">
     <!-- SIDEBAR (desktop) -->
-    <aside class="hidden md:flex md:flex-col md:w-60 lg:w-64 md:shrink-0 md:sticky md:top-0 md:h-dvh bg-white border-r border-brand-100">
+    <aside class="hidden md:flex md:flex-col md:w-60 lg:w-64 md:shrink-0 md:sticky md:top-0 md:h-dvh bg-card border-r border-brand-100">
       <div class="flex items-center gap-3 px-5 h-16 border-b border-brand-100">
-        <img :src="logoUrl" alt="" class="w-9 h-9 object-contain" />
+        <img :src="logoUrl" alt="" class="w-9 h-9 object-contain dark:bg-[#fff] dark:rounded-lg dark:p-0.5" />
         <div class="min-w-0">
           <p class="text-sm font-semibold text-ink leading-tight truncate">Rumah Alam Bahagia</p>
           <p class="text-xs text-ink-muted leading-tight">Sistem Internal</p>
@@ -137,7 +138,7 @@ async function handleLogout() {
         <button
           type="button"
           :disabled="loggingOut"
-          class="flex items-center gap-3 w-full h-10 px-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors duration-fast disabled:opacity-50"
+          class="flex items-center gap-3 w-full h-10 px-3 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-fast disabled:opacity-50"
           @click="handleLogout"
         >
           <LogOut class="w-[18px] h-[18px]" aria-hidden="true" />
@@ -148,11 +149,14 @@ async function handleLogout() {
 
     <!-- KONTEN -->
     <div class="flex-1 min-w-0 flex flex-col">
-      <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-brand-100 pt-safe">
+      <header class="sticky top-0 z-30 bg-card/95 backdrop-blur border-b border-brand-100 pt-safe">
         <div class="flex items-center gap-3 h-14 px-4 md:px-6">
-          <img :src="logoUrl" alt="" class="w-8 h-8 object-contain md:hidden" />
+          <img :src="logoUrl" alt="" class="w-8 h-8 object-contain md:hidden dark:bg-[#fff] dark:rounded-lg dark:p-0.5" />
           <h1 class="flex-1 min-w-0 text-base md:text-lg font-semibold text-ink truncate">{{ pageTitle }}</h1>
-          <NotificationBell />
+          <div class="flex items-center -mr-2">
+            <ThemeToggle />
+            <NotificationBell />
+          </div>
         </div>
       </header>
 
@@ -167,7 +171,7 @@ async function handleLogout() {
 
     <!-- BOTTOM NAV (mobile) -->
     <nav
-      class="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-brand-100 pb-safe"
+      class="md:hidden fixed inset-x-0 bottom-0 z-40 bg-card border-t border-brand-100 pb-safe"
       aria-label="Menu utama"
     >
       <div class="flex h-16">
@@ -211,7 +215,7 @@ async function handleLogout() {
     <transition name="fade">
       <div
         v-if="moreOpen"
-        class="md:hidden fixed inset-0 z-40 bg-black/30"
+        class="md:hidden fixed inset-0 z-40 bg-black/40"
         aria-hidden="true"
         @click="moreOpen = false"
       ></div>
@@ -223,7 +227,7 @@ async function handleLogout() {
         role="dialog"
         aria-modal="true"
         aria-label="Menu lainnya"
-        class="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-raised pb-safe"
+        class="md:hidden fixed inset-x-0 bottom-0 z-50 bg-card rounded-t-3xl shadow-raised pb-safe"
       >
         <div class="flex items-center justify-between px-5 pt-4 pb-2">
           <div class="flex items-center gap-3 min-w-0">
@@ -271,7 +275,7 @@ async function handleLogout() {
           <button
             type="button"
             :disabled="loggingOut"
-            class="flex items-center gap-3 w-full h-12 px-3 rounded-xl text-sm font-medium text-red-600 disabled:opacity-50"
+            class="flex items-center gap-3 w-full h-12 px-3 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 disabled:opacity-50"
             @click="handleLogout"
           >
             <LogOut class="w-5 h-5" aria-hidden="true" />

@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
         <div
           v-if="isOpen"
           ref="dropdownEl"
-          class="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] sm:inset-x-auto sm:right-6 sm:w-96 bg-white rounded-2xl shadow-raised border border-brand-100 z-[100] overflow-hidden"
+          class="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] sm:inset-x-auto sm:right-6 sm:w-96 bg-card rounded-2xl shadow-raised border border-brand-100 z-[100] overflow-hidden"
         >
           <div class="flex items-center justify-between gap-3 px-4 h-12 border-b border-brand-100">
             <h3 class="text-sm font-semibold text-ink">Notifikasi Terbaru</h3>
@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
             <LoaderCircle class="w-5 h-5 animate-spin" aria-hidden="true" />
             <span class="sr-only">Memuat...</span>
           </div>
-          <div v-else-if="errorMessage" class="p-4 text-center text-sm text-red-600">
+          <div v-else-if="errorMessage" class="p-4 text-center text-sm text-red-600 dark:text-red-400">
             {{ errorMessage }}
           </div>
           <div v-else-if="!notifications.length" class="p-8 flex flex-col items-center gap-2 text-sm text-ink-muted">
