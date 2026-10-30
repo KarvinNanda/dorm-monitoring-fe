@@ -76,18 +76,38 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 // Web push: daftar device ke backend + banner ajakan izin.
 const push = usePushNotifications()
 const pushStatus = push.status
-const pushAsked = ref(false)
 const pushBusy = ref(false)
 const pushDismissed = ref(false)
-const showPushBanner = computed(
-  () =>
-    !pushDismissed.value &&
-    (pushStatus.value === 'default' || (pushAsked.value && pushStatus.value === 'denied'))
+// Petunjuk buka blokir: sekali ditutup, tidak muncul lagi di browser ini.
+const BLOCKED_HINT_KEY = 'push-blocked-hint-dismissed'
+const blockedHintDismissed = ref(readFlag(BLOCKED_HINT_KEY))
+const showPushBanner = computed(() =>
+  pushStatus.value === 'denied'
+    ? !blockedHintDismissed.value
+    : pushStatus.value === 'default' && !pushDismissed.value
 )
+
+function readFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
+function dismissPushBanner() {
+  if (pushStatus.value !== 'denied') {
+    pushDismissed.value = true
+    return
+  }
+  blockedHintDismissed.value = true
+  try {
+    localStorage.setItem(BLOCKED_HINT_KEY, '1')
+  } catch {}
+}
 
 async function enablePush() {
   pushBusy.value = true
-  pushAsked.value = true
   try {
     await push.enable()
   } catch (err) {
@@ -196,7 +216,7 @@ async function handleLogout() {
           :blocked="pushStatus === 'denied'"
           :busy="pushBusy"
           @enable="enablePush"
-          @dismiss="pushDismissed = true"
+          @dismiss="dismissPushBanner"
         />
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">

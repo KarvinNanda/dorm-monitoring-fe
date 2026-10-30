@@ -274,6 +274,28 @@ describe('MainLayout — izin notifikasi push', () => {
     expect(wrapper.text()).toContain('Notifikasi diblokir')
   })
 
+  it('izin sudah diblokir sebelumnya → petunjuk buka blokir tampil saat layout dibuka', async () => {
+    loginAs('admin')
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'denied' }))
+    const wrapper = mount(MainLayout, mountOpts)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Notifikasi diblokir')
+  })
+
+  it('petunjuk blokir ditutup → tidak tampil lagi di kunjungan berikutnya', async () => {
+    loginAs('admin')
+    whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'denied' }))
+    const first = mount(MainLayout, mountOpts)
+    await flushPromises()
+    await findBtn(first, 'Tutup').trigger('click')
+    expect(first.text()).not.toContain('Notifikasi diblokir')
+    first.unmount()
+
+    const second = mount(MainLayout, mountOpts)
+    await flushPromises()
+    expect(second.text()).not.toContain('Notifikasi diblokir')
+  })
+
   it('sudah subscribe → daftar device saat layout dibuka, tanpa banner', async () => {
     loginAs('admin')
     whenOneSignalReady.mockResolvedValue(fakeSdk({ permission: 'granted', id: 'sub-9', optedIn: true }))
