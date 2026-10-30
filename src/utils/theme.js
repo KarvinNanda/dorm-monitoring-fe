@@ -7,11 +7,19 @@
  *
  * index.html memasang class `dark` sebelum app di-mount supaya tidak ada
  * kedip putih; modul ini hanya menyamakan state dan menangani toggle.
+ *
+ * Toggle dianimasikan supaya layar tidak langsung berubah putih/hitam:
+ *  - View Transitions API (Chrome, Edge, Safari 18+): crossfade seluruh halaman.
+ *  - Browser lain: class `theme-transition` sementara mentransisikan warna.
+ *  - "Reduce motion" di OS: langsung ganti tanpa animasi.
  */
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
 const STORAGE_KEY = 'theme'
 const THEME_COLORS = { light: '#ffffff', dark: '#161e18' }
+// Harus sama dengan durasi .theme-transition di style.css.
+const FALLBACK_MS = 400
+let fallbackTimer = null
 
 function readStored() {
   try {
@@ -51,5 +59,23 @@ export function toggleTheme() {
   } catch {
     // Private mode / storage diblokir: tema tetap berganti untuk sesi ini.
   }
+
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    apply(next)
+    return
+  }
+
+  if (typeof document.startViewTransition === 'function') {
+    // Tunggu Vue merender ulang (ikon matahari/bulan) sebelum snapshot baru diambil.
+    return document.startViewTransition(async () => {
+      apply(next)
+      await nextTick()
+    })
+  }
+
+  const root = document.documentElement
+  root.classList.add('theme-transition')
   apply(next)
+  clearTimeout(fallbackTimer)
+  fallbackTimer = setTimeout(() => root.classList.remove('theme-transition'), FALLBACK_MS)
 }
