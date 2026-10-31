@@ -9,6 +9,12 @@ import { readFileSync, existsSync } from 'node:fs'
 const root = process.cwd() + '/'
 const read = (p) => readFileSync(root + p, 'utf8')
 
+// Lebar dan tinggi asli PNG dari chunk IHDR (byte 16-23).
+const pngSize = (p) => {
+  const buf = readFileSync(root + p)
+  return `${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`
+}
+
 describe('web app manifest', () => {
   const manifest = JSON.parse(read('public/manifest.webmanifest'))
 
@@ -27,7 +33,19 @@ describe('web app manifest', () => {
     expect(bySize('512x512', 'maskable')).toBeTruthy()
     for (const icon of manifest.icons) {
       expect(existsSync(root + 'public' + icon.src), icon.src).toBe(true)
+      expect(pngSize('public' + icon.src), icon.src).toBe(icon.sizes)
     }
+  })
+
+  it('favicon memakai emblem (PNG 16 dan 32), bukan logo bawaan Vite', () => {
+    const html = read('index.html')
+    for (const size of ['16x16', '32x32']) {
+      const file = `public/favicon-${size.split('x')[0]}.png`
+      expect(html).toContain(`<link rel="icon" type="image/png" sizes="${size}" href="/${file.slice(7)}"`)
+      expect(pngSize(file)).toBe(size)
+    }
+    expect(html).not.toContain('favicon.svg')
+    expect(existsSync(root + 'public/favicon.svg')).toBe(false)
   })
 
   it('index.html menautkan manifest dan apple-touch-icon', () => {
