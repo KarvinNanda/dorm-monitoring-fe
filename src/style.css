@@ -167,12 +167,14 @@
   }
 }
 
-/* Light <-> dark switch (src/utils/theme.js). View Transitions crossfade the
-   whole page; the default 250ms reads as a flash, so it is slowed down. */
+/* Light <-> dark switch (src/utils/theme.js). The new theme is revealed as a
+   growing circle from the toggle icon, animated from JS with clip-path on
+   ::view-transition-new(root). The default crossfade is turned off so the old
+   snapshot stays still underneath instead of fading at the same time. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 400ms;
-  animation-timing-function: ease-in-out;
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 /* Fallback for browsers without View Transitions: fade colours instead of
