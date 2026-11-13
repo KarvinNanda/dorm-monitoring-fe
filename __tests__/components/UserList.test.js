@@ -182,6 +182,22 @@ describe('UserList', () => {
     }
   })
 
+  it('toolbar mobile: urutan tersembunyi di balik tombol "Urutkan", search tetap punya label', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.find('label[for="user-search"]').exists()).toBe(true)
+    const toggle = wrapper.find('button[aria-controls="user-sort-fields"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    const fields = wrapper.find('#user-sort-fields')
+    expect(fields.classes()).toContain('hidden')
+    expect(fields.classes()).toContain('sm:contents')
+    expect(fields.find('#user-sort').exists()).toBe(true)
+    expect(fields.find('#user-order').exists()).toBe(true)
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('#user-sort-fields').classes()).not.toContain('hidden')
+  })
+
   it('list error → tampilkan pesan', async () => {
     userService.list.mockReset()
     userService.list.mockRejectedValueOnce({

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserCheck, UserX } from 'lucide-vue-next'
+import { KeyRound, Pencil, Plus, ShieldCheck, SlidersHorizontal, Trash2, UserCheck, UserX } from 'lucide-vue-next'
 import AppToast from '@/components/AppToast.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
@@ -27,6 +27,8 @@ const meta = ref(null) // { total, page, limit, totalPages } (fleksibel)
 const search = ref('')
 const sortBy = ref('createdAt') // name | createdAt
 const sortOrder = ref('desc') // asc | desc
+// Mobile only: the sort selects stay folded behind the "Urutkan" button.
+const showSort = ref(false)
 
 // Modal create/edit
 const showModal = ref(false)
@@ -332,27 +334,47 @@ function roleLabel(r) {
   <div class="space-y-4">
     <AppToast :toast="toast" />
 
-    <!-- Toolbar. Judul halaman sudah ada di header layout. -->
+    <!-- Toolbar. Judul halaman sudah ada di header layout.
+         Mobile: search, then "Urutkan" + "Tambah User" in one row; the sort
+         selects open below them (same pattern as the filters on Tamu).
+         From sm up, #user-sort-fields is display: contents, so its two
+         selects are plain grid items in the 4-column row. -->
     <section class="card p-4 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_auto_auto_auto] items-end" aria-label="Cari dan urutkan user">
       <div class="col-span-2 sm:col-span-1">
-        <label for="user-search" class="field-label text-xs">Cari</label>
-        <input id="user-search" v-model="search" type="search" placeholder="Nama atau email" class="field" />
+        <label for="user-search" class="field-label text-xs sr-only sm:not-sr-only sm:mb-1.5">Cari</label>
+        <input id="user-search" v-model="search" type="search" placeholder="Cari nama" class="field" />
       </div>
-      <div>
-        <label for="user-sort" class="field-label text-xs">Urutkan</label>
-        <select id="user-sort" v-model="sortBy" class="field">
-          <option value="createdAt">Dibuat</option>
-          <option value="name">Nama</option>
-        </select>
+      <button
+        type="button"
+        class="btn btn-secondary sm:hidden"
+        :aria-expanded="showSort"
+        aria-controls="user-sort-fields"
+        @click="showSort = !showSort"
+      >
+        <SlidersHorizontal class="w-4 h-4" aria-hidden="true" />
+        {{ showSort ? 'Tutup' : 'Urutkan' }}
+      </button>
+      <div
+        id="user-sort-fields"
+        class="sm:contents"
+        :class="showSort ? 'col-span-2 order-last grid grid-cols-2 gap-3' : 'hidden'"
+      >
+        <div>
+          <label for="user-sort" class="field-label text-xs">Urutkan</label>
+          <select id="user-sort" v-model="sortBy" class="field">
+            <option value="createdAt">Dibuat</option>
+            <option value="name">Nama</option>
+          </select>
+        </div>
+        <div>
+          <label for="user-order" class="field-label text-xs">Arah</label>
+          <select id="user-order" v-model="sortOrder" class="field">
+            <option value="desc">Terbaru</option>
+            <option value="asc">Terlama</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label for="user-order" class="field-label text-xs">Arah</label>
-        <select id="user-order" v-model="sortOrder" class="field">
-          <option value="desc">Terbaru</option>
-          <option value="asc">Terlama</option>
-        </select>
-      </div>
-      <button type="button" class="btn btn-primary col-span-2 sm:col-span-1" @click="openCreate">
+      <button type="button" class="btn btn-primary" @click="openCreate">
         <Plus class="w-4 h-4" aria-hidden="true" />
         Tambah User
       </button>
