@@ -13,6 +13,7 @@ import {
   nowJakartaDatetimeInput,
   jakartaInputToISO
 } from '@/utils/dateFormat'
+import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.hasRole('admin'))
@@ -106,7 +107,9 @@ async function doClock(action) {
 const myHistory = ref([])
 const myHistoryMeta = ref(null)
 const myHistoryPage = ref(1)
-const myHistoryLimit = ref(4)
+// 10 rows per page on desktop, 5 on mobile.
+const pageSize = usePageSize()
+const myHistoryLimit = pageSize
 const myHistoryFrom = ref('')
 const myHistoryTo = ref('')
 const loadingMyHistory = ref(false)
@@ -151,7 +154,7 @@ const adminTab = ref('latest')
 const latestList = ref([])
 const latestMeta = ref(null)
 const latestPage = ref(1)
-const latestLimit = ref(4)
+const latestLimit = pageSize
 const latestType = ref('')
 const loadingLatest = ref(false)
 
@@ -194,10 +197,20 @@ const selectedUserId = ref('')
 const userHistory = ref([])
 const userHistoryMeta = ref(null)
 const userHistoryPage = ref(1)
-const userHistoryLimit = ref(4)
+const userHistoryLimit = pageSize
 const userHistoryFrom = ref('')
 const userHistoryTo = ref('')
 const loadingUserHistory = ref(false)
+
+// Only residents can tap in / out (backend: POST /check-log/in|out is
+// @Roles(Role.Resident)), so only they belong in the user selects. `users`
+// keeps everyone, it is also the name lookup for entries in the latest list.
+function canDoAttendance(user) {
+  return (user?.roles || []).some(
+    (r) => String(typeof r === 'string' ? r : r?.name || '').toLowerCase() === 'resident'
+  )
+}
+const attendanceUsers = computed(() => users.value.filter(canDoAttendance))
 
 async function fetchUsers() {
   if (!isAdmin.value) return
@@ -343,6 +356,13 @@ function typeLabel(t) {
 }
 
 // ============ MOUNT ============
+// Viewport crossed the desktop/mobile breakpoint: new page size, start at page 1.
+watch(pageSize, () => {
+  resetToFirstPage(myHistoryPage, fetchMyHistory)
+  resetToFirstPage(latestPage, fetchLatest)
+  resetToFirstPage(userHistoryPage, fetchUserHistory)
+})
+
 onMounted(async () => {
   if (isResident.value) {
     await Promise.all([fetchMyStatus(), fetchMyHistory()])
@@ -534,7 +554,7 @@ onMounted(async () => {
             <label for="history-user" class="field-label text-xs">User</label>
             <select id="history-user" v-model="selectedUserId" class="field">
               <option value="">Pilih user</option>
-              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+              <option v-for="u in attendanceUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
             </select>
           </div>
           <div>
@@ -602,7 +622,7 @@ onMounted(async () => {
             <label for="manual-user" class="field-label">User</label>
             <select id="manual-user" v-model="manualForm.userId" required class="field">
               <option value="" disabled>Pilih user</option>
-              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+              <option v-for="u in attendanceUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
             </select>
           </div>
           <div>

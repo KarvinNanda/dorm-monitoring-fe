@@ -10,6 +10,7 @@ import { itemCategoryService } from '@/services/itemCategoryService'
 import { itemTransactionService } from '@/services/itemTransactionService'
 import { useAuthStore } from '@/stores/authStore'
 import { formatDate } from '@/utils/dateFormat'
+import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
 
 // ============ AUTH / PERMISSIONS ============
 // Permission matrix per API doc:
@@ -43,7 +44,9 @@ const showTxFilters = ref(false)
 const items = ref([])
 const itemMeta = ref(null)
 const itemPage = ref(1)
-const itemLimit = ref(10)
+// 10 rows per page on desktop, 5 on mobile.
+const pageSize = usePageSize()
+const itemLimit = pageSize
 const itemSearch = ref('')
 const itemSortBy = ref('createdAt')
 const itemSortOrder = ref('desc')
@@ -207,7 +210,7 @@ async function saveTx() {
 const categories = ref([])
 const categoryMeta = ref(null)
 const categoryPage = ref(1)
-const categoryLimit = ref(10)
+const categoryLimit = pageSize
 const categorySortBy = ref('createdAt')
 const categorySortOrder = ref('desc')
 const loadingCategories = ref(false)
@@ -317,7 +320,7 @@ async function removeCategory(c) {
 const txs = ref([])
 const txMeta = ref(null)
 const txPage = ref(1)
-const txLimit = ref(10)
+const txLimit = pageSize
 const txFrom = ref('')
 const txTo = ref('')
 const txType = ref('')
@@ -400,6 +403,13 @@ function txChangeLabel(t) {
 const txHint = computed(() => txTypeInfo(txForm.value.type).hint)
 
 // ============ MOUNT ============
+// Viewport crossed the desktop/mobile breakpoint: new page size, start at page 1.
+watch(pageSize, () => {
+  resetToFirstPage(itemPage, fetchItems)
+  resetToFirstPage(categoryPage, fetchCategories)
+  resetToFirstPage(txPage, fetchTransactions)
+})
+
 onMounted(async () => {
   // Transaksi global hanya admin → skip fetch & dropdown item kalau bukan admin
   // (dropdown item dipakai di filter transaksi yang juga admin-only).

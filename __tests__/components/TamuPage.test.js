@@ -23,6 +23,7 @@ vi.mock('@/services/guestVisitService', () => ({
 }))
 
 import TamuPage from '@/modules/tamu/views/TamuPage.vue'
+import { mockMobileViewport } from '../helpers/viewport'
 import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { guestService } from '@/services/guestService'
 import { guestVisitService } from '@/services/guestVisitService'
@@ -52,6 +53,20 @@ describe('TamuPage', () => {
     await flushPromises()
     expect(guestVisitService.list).toHaveBeenCalled()
     expect(guestService.list).toHaveBeenCalled()
+  })
+
+  it('page size: 10 rows on desktop, 5 on mobile', async () => {
+    mount(TamuPage)
+    await flushPromises()
+    expect(guestVisitService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }))
+    expect(guestService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }))
+
+    vi.clearAllMocks()
+    mockMobileViewport()
+    mount(TamuPage)
+    await flushPromises()
+    expect(guestVisitService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
+    expect(guestService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
   })
 
   it('render tab default (kunjungan) menampilkan nama tamu + status open', async () => {

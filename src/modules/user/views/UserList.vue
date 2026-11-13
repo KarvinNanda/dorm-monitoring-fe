@@ -8,6 +8,7 @@ import PasswordInput from '@/components/PasswordInput.vue'
 import { confirmDialog } from '@/composables/useConfirm'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
 
 const authStore = useAuthStore()
 
@@ -19,7 +20,9 @@ const listError = ref('')
 
 // Pagination & query
 const page = ref(1)
-const limit = ref(4)
+// 10 rows per page on desktop, 5 on mobile.
+const pageSize = usePageSize()
+const limit = pageSize
 const meta = ref(null) // { total, page, limit, totalPages } (fleksibel)
 const search = ref('')
 const sortBy = ref('createdAt') // name | createdAt
@@ -87,14 +90,15 @@ const totalPages = computed(() => {
   return meta.value.totalPages || meta.value.total_pages || Math.max(1, Math.ceil((meta.value.total || 0) / limit.value))
 })
 
-// Sembunyikan user yang sedang login dari tabel supaya tidak bisa
-// menon-aktifkan / hapus akunnya sendiri dari halaman ini.
-// Untuk kelola akun sendiri gunakan halaman /profile.
-const visibleUsers = computed(() => {
+// The logged-in user's own row stays in the list. Filtering it out on the
+// client after the server already paginated made pages come up one short,
+// and a last page holding only this account showed "Tidak ada user.".
+// The row gets no role / reset / deactivate / delete buttons (so an admin
+// cannot lock themselves out from here); own account is managed on /profile.
+function isSelf(user) {
   const currentId = authStore.user?.id
-  if (!currentId) return users.value
-  return users.value.filter((u) => String(u.id) !== String(currentId))
-})
+  return currentId != null && String(user?.id) === String(currentId)
+}
 
 // ============ LOAD DATA ============
 async function fetchUsers() {
@@ -125,6 +129,11 @@ async function fetchRoles() {
     console.warn('Gagal memuat roles:', extractError(err))
   }
 }
+
+// Viewport crossed the desktop/mobile breakpoint: new page size, start at page 1.
+watch(pageSize, () => {
+  resetToFirstPage(page, fetchUsers)
+})
 
 onMounted(async () => {
   await Promise.all([fetchUsers(), fetchRoles()])
@@ -357,7 +366,7 @@ function roleLabel(r) {
           <button type="button" class="btn btn-secondary h-9 shrink-0" @click="fetchUsers">Coba lagi</button>
         </div>
       </div>
-      <div v-else-if="!visibleUsers.length" class="empty-state">Tidak ada user.</div>
+      <div v-else-if="!users.length" class="empty-state">Tidak ada user.</div>
       <template v-else>
         <!-- DESKTOP table -->
         <div class="hidden md:block overflow-x-auto">
@@ -371,9 +380,12 @@ function roleLabel(r) {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr v-for="user in visibleUsers" :key="user.id" class="hover:bg-gray-50">
+              <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
                 <td class="px-4 py-2.5">
-                  <p class="font-medium text-ink">{{ user.name }}</p>
+                  <p class="font-medium text-ink">
+                    {{ user.name }}
+                    <span v-if="isSelf(user)" class="chip chip-gray ml-1">Anda</span>
+                  </p>
                   <p class="text-xs text-ink-muted">{{ user.email }}</p>
                 </td>
                 <td class="px-4 py-2.5">
@@ -386,7 +398,11 @@ function roleLabel(r) {
                   <span class="chip" :class="isActive(user) ? 'chip-brand' : 'chip-gray'">{{ isActive(user) ? 'Aktif' : 'Nonaktif' }}</span>
                 </td>
                 <td class="px-4 py-2.5">
-                  <div class="flex justify-end gap-1">
+                  <div v-if="isSelf(user)" class="flex justify-end">
+                    <!-- No border and 10px padding: the text ends where the icon glyphs end in the rows below. -->
+                    <RouterLink to="/profile" class="btn h-9 px-2.5 text-brand-700 hover:bg-gray-100">Kelola di Profil</RouterLink>
+                  </div>
+                  <div v-else class="flex justify-end gap-1">
                     <button type="button" class="icon-btn" title="Ubah" :aria-label="`Ubah ${user.name}`" @click="openEdit(user)">
                       <Pencil class="w-4 h-4" aria-hidden="true" />
                     </button>
@@ -419,10 +435,13 @@ function roleLabel(r) {
 
         <!-- MOBILE list -->
         <ul class="md:hidden divide-y divide-gray-200">
-          <li v-for="user in visibleUsers" :key="user.id" class="p-4">
+          <li v-for="user in users" :key="user.id" class="p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="font-semibold text-ink truncate">{{ user.name }}</p>
+                <p class="font-semibold text-ink truncate">
+                  {{ user.name }}
+                  <span v-if="isSelf(user)" class="chip chip-gray ml-1">Anda</span>
+                </p>
                 <p class="text-sm text-ink-muted truncate">{{ user.email }}</p>
               </div>
               <span class="chip" :class="isActive(user) ? 'chip-brand' : 'chip-gray'">{{ isActive(user) ? 'Aktif' : 'Nonaktif' }}</span>
@@ -431,7 +450,8 @@ function roleLabel(r) {
               <span v-for="rn in roleNames(user)" :key="rn" class="chip chip-brand capitalize">{{ rn }}</span>
               <span v-if="!roleNames(user).length" class="text-sm text-ink-muted">Tanpa role</span>
             </div>
-            <div class="mt-3 flex items-center gap-1">
+            <RouterLink v-if="isSelf(user)" to="/profile" class="btn btn-secondary w-full mt-3">Kelola di Profil</RouterLink>
+            <div v-else class="mt-3 flex items-center gap-1">
               <button type="button" class="btn btn-secondary flex-1 mr-1" @click="openEdit(user)">
                 <Pencil class="w-4 h-4" aria-hidden="true" />
                 Ubah

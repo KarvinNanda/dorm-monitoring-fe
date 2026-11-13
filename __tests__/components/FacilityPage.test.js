@@ -33,6 +33,7 @@ vi.mock('@/services/facilityReservationService', () => ({
 }))
 
 import FacilityPage from '@/modules/facility/views/FacilityPage.vue'
+import { mockMobileViewport } from '../helpers/viewport'
 import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { facilityService } from '@/services/facilityService'
 import { facilityReservationService } from '@/services/facilityReservationService'
@@ -65,6 +66,14 @@ describe('FacilityPage', () => {
     await flushPromises()
     expect(facilityReservationService.list).toHaveBeenCalled()
     expect(facilityService.list).toHaveBeenCalled()
+  })
+
+  it('page size: 5 rows on mobile', async () => {
+    mockMobileViewport()
+    mount(FacilityPage)
+    await flushPromises()
+    expect(facilityReservationService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
+    expect(facilityService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
   })
 
   it('menampilkan reservasi; status PENDING tampil sebagai "Menunggu"', async () => {
