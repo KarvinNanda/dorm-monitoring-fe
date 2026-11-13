@@ -13,6 +13,7 @@ import {
   jakartaInputToISO,
   nowJakartaDatetimeInput
 } from '@/utils/dateFormat'
+import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
 
 // ============ TOAST ============
 const toast = ref({ show: false, type: 'success', message: '' })
@@ -40,7 +41,9 @@ const showVisitFilters = ref(false)
 const guests = ref([])
 const guestMeta = ref(null)
 const guestPage = ref(1)
-const guestLimit = ref(5)
+// 10 rows per page on desktop, 5 on mobile.
+const pageSize = usePageSize()
+const guestLimit = pageSize
 const guestSearch = ref('')
 const guestSortBy = ref('createdAt')
 const guestSortOrder = ref('desc')
@@ -181,7 +184,7 @@ function guestNameById(id) {
 const visits = ref([])
 const visitMeta = ref(null)
 const visitPage = ref(1)
-const visitLimit = ref(5)
+const visitLimit = pageSize
 const visitFrom = ref('')
 const visitTo = ref('')
 const visitStatus = ref('all') // all | open | closed
@@ -357,6 +360,12 @@ function resolvedGuestName(v) {
 }
 
 // ============ MOUNT ============
+// Viewport crossed the desktop/mobile breakpoint: new page size, start at page 1.
+watch(pageSize, () => {
+  resetToFirstPage(guestPage, fetchGuests)
+  resetToFirstPage(visitPage, fetchVisits)
+})
+
 onMounted(async () => {
   await Promise.all([fetchVisits(), fetchGuests(), fetchAllGuestsForSelect()])
 })

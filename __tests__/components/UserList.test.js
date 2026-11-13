@@ -2,7 +2,7 @@
  * UserList smoke test.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, config } from '@vue/test-utils'
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -21,6 +21,9 @@ import UserList from '@/modules/user/views/UserList.vue'
 import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+
+// UserList links the own-account row to /profile. No router in these tests.
+config.global.stubs = { ...config.global.stubs, RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } }
 
 describe('UserList', () => {
   beforeEach(() => {
@@ -50,14 +53,42 @@ describe('UserList', () => {
     expect(userService.listRoles).toHaveBeenCalled()
   })
 
-  it('render baris user lain & menyembunyikan akun sendiri', async () => {
+  it('render semua user dari server, termasuk akun sendiri', async () => {
     const wrapper = mount(UserList)
     await flushPromises()
     const text = wrapper.text()
     expect(text).toContain('Andi')
     expect(text).toContain('Budi')
-    // current user "Me" disembunyikan dari tabel
-    expect(text).not.toContain('me@x')
+    expect(text).toContain('me@x')
+  })
+
+  it('akun sendiri: tanda "Anda", tanpa tombol role / reset / nonaktifkan / hapus, ada link ke profil', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Anda')
+    const labels = wrapper.findAll('button').map((b) => b.attributes('aria-label') || '')
+    expect(labels.some((l) => l.endsWith(' Me'))).toBe(false)
+    expect(labels).toContain('Hapus user Andi')
+    expect(wrapper.find('a[href="/profile"]').exists()).toBe(true)
+  })
+
+  it('regresi: halaman terakhir yang hanya berisi akun sendiri tidak kosong', async () => {
+    // 5 user di DB. Dulu limit 4 + filter akun sendiri di client membuat
+    // halaman 2 (isinya hanya akun sendiri) tampil "Tidak ada user."
+    userService.list.mockResolvedValue({
+      data: [{ id: 99, name: 'Me', email: 'me@x', roles: [{ id: 1, name: 'admin' }], isActive: true }],
+      meta: { total: 5, totalPages: 2, page: 2 }
+    })
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Tidak ada user.')
+    expect(wrapper.text()).toContain('me@x')
+  })
+
+  it('10 user per halaman di desktop', async () => {
+    mount(UserList)
+    await flushPromises()
+    expect(userService.list).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 10 }))
   })
 
   it('aktifkan user nonaktif → langsung memanggil activate', async () => {

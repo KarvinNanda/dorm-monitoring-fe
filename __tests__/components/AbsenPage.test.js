@@ -100,6 +100,12 @@ describe('AbsenPage — resident', () => {
     expect(checkLogService.clockIn).toHaveBeenCalledWith('catatan masuk')
   })
 
+  it('riwayat saya: 10 rows per page on desktop', async () => {
+    mount(AbsenPage)
+    await flushPromises()
+    expect(checkLogService.getMyHistory).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }))
+  })
+
   it('TIDAK fetch data admin (latest/users) untuk role resident', async () => {
     mount(AbsenPage)
     await flushPromises()
@@ -150,6 +156,51 @@ describe('AbsenPage — admin', () => {
     await flushPromises()
     expect(wrapper.text()).toMatch(/Pilih user/i)
     expect(checkLogService.createManual).not.toHaveBeenCalled()
+  })
+
+  it('latest list: 10 rows per page on desktop', async () => {
+    mount(AbsenPage)
+    await flushPromises()
+    expect(checkLogService.listLatest).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }))
+  })
+})
+
+describe('AbsenPage — admin user dropdowns only list users who can do attendance', () => {
+  // Backend: POST /check-log/in|out is @Roles(Role.Resident). Role names
+  // come back as plain strings in the user list ("Resident", "Admin", ...).
+  beforeEach(() => {
+    vi.clearAllMocks()
+    loginAs('admin')
+    checkLogService.listLatest.mockResolvedValue({ data: [], meta: { total: 0, totalPages: 1 } })
+    userService.list.mockResolvedValue({
+      data: [
+        { id: 5, name: 'Andi', roles: ['Resident'] },
+        { id: 6, name: 'Rina', roles: ['Admin'] },
+        { id: 7, name: 'Sari', roles: ['Receptionist'] },
+        { id: 8, name: 'Dodi', roles: ['Admin', 'Resident'] },
+        { id: 9, name: 'Tono', roles: [{ id: 2, name: 'resident' }] },
+        { id: 10, name: 'Wati', roles: [] }
+      ],
+      meta: { total: 6, totalPages: 1 }
+    })
+  })
+
+  function optionNames(select) {
+    return select.findAll('option').map((o) => o.text()).filter((t) => t !== 'Pilih user')
+  }
+
+  it('riwayat per user: only residents in the select', async () => {
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    await wrapper.findAll('button[role="tab"]').find((b) => b.text().includes('Riwayat per User')).trigger('click')
+    expect(optionNames(wrapper.find('#history-user'))).toEqual(['Andi', 'Dodi', 'Tono'])
+  })
+
+  it('absensi manual: only residents in the select', async () => {
+    const wrapper = mount(AbsenPage)
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text().includes('Absensi Manual')).trigger('click')
+    expect(optionNames(wrapper.find('#manual-user'))).toEqual(['Andi', 'Dodi', 'Tono'])
   })
 })
 

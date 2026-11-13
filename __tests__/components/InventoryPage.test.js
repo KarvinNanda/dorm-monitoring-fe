@@ -44,6 +44,7 @@ vi.mock('@/services/itemTransactionService', () => ({
 }))
 
 import InventoryPage from '@/modules/inventory/views/InventoryPage.vue'
+import { mockMobileViewport } from '../helpers/viewport'
 import { mountWithConfirm, answerConfirm } from '../helpers/confirmDialog'
 import { itemService } from '@/services/itemService'
 import { itemCategoryService } from '@/services/itemCategoryService'
@@ -74,6 +75,15 @@ describe('InventoryPage', () => {
     expect(itemService.list).toHaveBeenCalled()
     expect(itemCategoryService.list).toHaveBeenCalled()
     expect(itemTransactionService.list).toHaveBeenCalled()
+  })
+
+  it('page size: 5 rows on mobile', async () => {
+    mockMobileViewport()
+    mount(InventoryPage)
+    await flushPromises()
+    expect(itemService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
+    expect(itemCategoryService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
+    expect(itemTransactionService.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
   })
 
   it('merender row item di tab default', async () => {

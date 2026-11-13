@@ -14,6 +14,7 @@ import {
   jakartaInputToISO,
   nowJakartaDatetimeInput
 } from '@/utils/dateFormat'
+import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
 
 // ============ AUTH / PERMISSIONS ============
 // Permission matrix per API doc:
@@ -45,7 +46,9 @@ const showReservationFilters = ref(false)
 const facilities = ref([])
 const facilityMeta = ref(null)
 const facilityPage = ref(1)
-const facilityLimit = ref(10)
+// 10 rows per page on desktop, 5 on mobile.
+const pageSize = usePageSize()
+const facilityLimit = pageSize
 const facilitySearch = ref('')
 const facilitySortBy = ref('createdAt')
 const facilitySortOrder = ref('desc')
@@ -171,7 +174,7 @@ async function removeFacility(f) {
 const reservations = ref([])
 const reservationMeta = ref(null)
 const reservationPage = ref(1)
-const reservationLimit = ref(10)
+const reservationLimit = pageSize
 const reservationFrom = ref('')
 const reservationTo = ref('')
 const reservationStatus = ref('')
@@ -372,6 +375,12 @@ function resolvedFacilityName(r) {
 }
 
 // ============ MOUNT ============
+// Viewport crossed the desktop/mobile breakpoint: new page size, start at page 1.
+watch(pageSize, () => {
+  resetToFirstPage(facilityPage, fetchFacilities)
+  resetToFirstPage(reservationPage, fetchReservations)
+})
+
 onMounted(async () => {
   await Promise.all([
     fetchReservations(),
