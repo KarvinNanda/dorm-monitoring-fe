@@ -14,6 +14,7 @@ import {
   jakartaInputToISO
 } from '@/utils/dateFormat'
 import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.hasRole('admin'))
@@ -21,7 +22,7 @@ const isResident = computed(() => authStore.hasRole('resident'))
 
 // ============ COMMON HELPERS ============
 function extractError(err, fallback = 'Terjadi kesalahan') {
-  return err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback
+  return apiErrorMessage(err, fallback)
 }
 
 // Tanggal "Hari ini" — dirender via util WIB supaya konsisten lintas timezone.
