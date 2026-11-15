@@ -118,6 +118,34 @@ describe('ProfilePage', () => {
     expect(authService.resetPassword).toHaveBeenCalledWith('current123', 'newpass12')
   })
 
+  it('ganti kata sandi kena 429 → "coba lagi dalam 1 menit"', async () => {
+    authService.resetPassword.mockRejectedValueOnce({
+      response: { status: 429, data: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts' } }
+    })
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await openPasswordModal(wrapper)
+    const inputs = wrapper.findAll('input[type="password"]')
+    await inputs[0].setValue('current123')
+    await inputs[1].setValue('baru12345')
+    await inputs[2].setValue('baru12345')
+    const forms = wrapper.findAll('form')
+    await forms[forms.length - 1].trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Coba lagi dalam 1 menit')
+  })
+
+  it('simpan profil dengan email yang sudah dipakai → pesan 409 dalam bahasa Indonesia', async () => {
+    userService.updateMe.mockRejectedValueOnce({
+      response: { status: 409, data: { code: 'EMAIL_ALREADY_EXISTS', message: 'Email is already registered' } }
+    })
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Email ini sudah dipakai user lain.')
+  })
+
   it('modal ganti kata sandi: ketiga field punya tombol mata', async () => {
     const wrapper = mount(ProfilePage)
     await flushPromises()

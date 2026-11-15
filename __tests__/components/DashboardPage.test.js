@@ -168,14 +168,14 @@ describe('DashboardPage — resident payload', () => {
     expect(text).not.toContain('No clock log yet')
   })
 
-  it('API 500 tetap tampil sebagai error', async () => {
+  it('API 500 tetap tampil sebagai error, dengan ID request untuk laporan bug', async () => {
     dashboardService.get.mockReset()
     dashboardService.get.mockRejectedValue({
-      response: { status: 500, data: { message: 'Server crash' } }
+      response: { status: 500, data: { code: 'INTERNAL_ERROR', message: 'Internal server error', requestId: 'req-42' } }
     })
     const wrapper = mount(DashboardPage)
     await flushPromises()
-    expect(wrapper.text()).toContain('Server crash')
+    expect(wrapper.text()).toContain('Terjadi kesalahan di server. (ID: req-42)')
     expect(wrapper.text()).toContain('Coba lagi')
   })
 })

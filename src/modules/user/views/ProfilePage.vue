@@ -7,6 +7,7 @@ import PasswordInput from '@/components/PasswordInput.vue'
 import { authService } from '@/services/authService'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
 
@@ -36,7 +37,7 @@ const savingPassword = ref(false)
 
 // ============ HELPERS ============
 function extractError(err, fallback = 'Terjadi kesalahan') {
-  return err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback
+  return apiErrorMessage(err, fallback)
 }
 
 const roleLabels = computed(() => {

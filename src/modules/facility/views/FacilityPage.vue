@@ -15,6 +15,7 @@ import {
   nowJakartaDatetimeInput
 } from '@/utils/dateFormat'
 import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
+import { apiErrorMessage } from '@/utils/apiError'
 
 // ============ AUTH / PERMISSIONS ============
 // Permission matrix per API doc:
@@ -34,7 +35,7 @@ function showToast(message, type = 'success') {
   toastTimer = setTimeout(() => (toast.value.show = false), 2500)
 }
 function extractError(err, fallback = 'Terjadi kesalahan') {
-  return err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback
+  return apiErrorMessage(err, fallback)
 }
 
 // ============ TABS ============

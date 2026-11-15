@@ -6,6 +6,7 @@ import { authService } from '@/services/authService'
 import logoUrl from '@/assets/logo-3.png'
 import { CircleAlert, LoaderCircle } from 'lucide-vue-next'
 import PasswordInput from '@/components/PasswordInput.vue'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -36,17 +37,8 @@ async function handleLogin() {
     // 3) Redirect ke dashboard. Device push didaftarkan oleh MainLayout.
     router.push('/dashboard')
   } catch (err) {
-    // Handle error response
-    const status = err.response?.status
-    const serverMsg = err.response?.data?.message || err.response?.data?.error
-
-    if (status === 401 || status === 400) {
-      error.value = serverMsg || 'Email atau kata sandi salah.'
-    } else if (err.code === 'ERR_NETWORK') {
-      error.value = 'Tidak dapat terhubung ke server. Periksa koneksi Anda.'
-    } else {
-      error.value = serverMsg || err.message || 'Terjadi kesalahan. Silakan coba lagi.'
-    }
+    // Wrong password, 429 (max 5 attempts per minute), network down, 5xx with ID.
+    error.value = apiErrorMessage(err, 'Terjadi kesalahan. Silakan coba lagi.')
 
     authStore.clearAuth()
   } finally {

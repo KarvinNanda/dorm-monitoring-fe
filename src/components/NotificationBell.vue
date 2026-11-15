@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { notificationService } from '@/services/notificationService'
 import { formatDate } from '@/utils/dateFormat'
 import { Bell, CheckCheck, Inbox, LoaderCircle } from 'lucide-vue-next'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const isOpen = ref(false)
 const unreadCount = ref(0)
@@ -47,8 +48,7 @@ async function fetchNotifications() {
     list.sort((a, b) => new Date(notifTime(b)) - new Date(notifTime(a)))
     notifications.value = list
   } catch (err) {
-    errorMessage.value =
-      err?.response?.data?.message || err?.message || 'Gagal memuat notifikasi'
+    errorMessage.value = apiErrorMessage(err, 'Gagal memuat notifikasi')
   } finally {
     loading.value = false
   }

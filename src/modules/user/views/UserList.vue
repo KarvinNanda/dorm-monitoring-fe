@@ -9,6 +9,7 @@ import { confirmDialog } from '@/composables/useConfirm'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
 import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
 
@@ -67,12 +68,7 @@ function showToast(message, type = 'success') {
 
 // ============ HELPERS ============
 function extractError(err, fallback = 'Terjadi kesalahan') {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.error ||
-    err?.message ||
-    fallback
-  )
+  return apiErrorMessage(err, fallback)
 }
 
 function roleNames(user) {
