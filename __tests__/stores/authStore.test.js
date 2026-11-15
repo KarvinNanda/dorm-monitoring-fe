@@ -93,6 +93,18 @@ describe('authStore', () => {
       expect(store.refreshToken).toBe('r')
     })
 
+    it('syncTokensFromStorage memuat token terbaru yang ditulis tab lain', () => {
+      const store = useAuthStore()
+      store.setTokens('a1', 'r1')
+      localStorage.setItem('accessToken', 'a2')
+      localStorage.setItem('refreshToken', 'r2')
+      expect(store.syncTokensFromStorage()).toEqual({ accessToken: 'a2', refreshToken: 'r2' })
+      expect(store.accessToken).toBe('a2')
+      expect(store.refreshToken).toBe('r2')
+      localStorage.clear()
+      expect(store.syncTokensFromStorage()).toEqual({ accessToken: null, refreshToken: null })
+    })
+
     it('isAuthenticated tracks accessToken', () => {
       const store = useAuthStore()
       expect(store.isAuthenticated).toBe(false)
