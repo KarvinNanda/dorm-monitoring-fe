@@ -134,7 +134,8 @@ describe('api axios instance', () => {
 
       try {
         const handler = api.interceptors.response.handlers[0].rejected
-        const originalReq = { url: '/user', headers: {} }
+        // Request interceptor selalu memasang token yang dipakai saat request dikirim.
+        const originalReq = { url: '/user', headers: { Authorization: 'Bearer old-access' } }
         const err = { response: { status: 401 }, config: originalReq }
 
         const result = await handler(err)
@@ -153,21 +154,141 @@ describe('api axios instance', () => {
       }
     })
 
-    it('refresh gagal → clearAuth + redirect /login', async () => {
+    it('refresh ditolak (401 dari /auth/refresh) → clearAuth + redirect /login', async () => {
       const store = useAuthStore()
       store.setTokens('old-access', 'refresh-token')
       store.setUser({ id: 1 })
 
-      vi.spyOn(axiosDefault, 'post').mockRejectedValueOnce(new Error('boom'))
+      const refreshErr = Object.assign(new Error('Unauthorized'), { response: { status: 401, data: {} } })
+      vi.spyOn(axiosDefault, 'post').mockRejectedValueOnce(refreshErr)
 
       const handler = api.interceptors.response.handlers[0].rejected
-      const err = { response: { status: 401 }, config: { url: '/user', headers: {} } }
+      const err = { response: { status: 401 }, config: { url: '/user', headers: { Authorization: 'Bearer old-access' } } }
 
       await expect(handler(err)).rejects.toBeInstanceOf(Error)
       expect(store.accessToken).toBeNull()
       expect(store.refreshToken).toBeNull()
       expect(store.user).toBeNull()
       expect(window.location.href).toMatch(/\/login$/)
+    })
+  })
+
+  describe('refresh token sekali pakai (backend rotasi setiap /auth/refresh)', () => {
+    let originalAdapter
+    let adapter
+
+    beforeEach(() => {
+      originalAdapter = api.defaults.adapter
+      adapter = vi.fn(async (config) => ({ data: 'retried', status: 200, statusText: 'OK', headers: {}, config }))
+      api.defaults.adapter = adapter
+    })
+    afterEach(() => {
+      api.defaults.adapter = originalAdapter
+      delete navigator.locks
+    })
+
+    const handler = () => api.interceptors.response.handlers[0].rejected
+    const unauthorized = (token) => ({
+      response: { status: 401 },
+      config: { url: '/user', headers: { Authorization: `Bearer ${token}` } }
+    })
+
+    it('tiga request 401 bersamaan → hanya SATU POST /auth/refresh, semuanya diulang dengan token baru', async () => {
+      const store = useAuthStore()
+      store.setTokens('old-access', 'refresh-1')
+      let resolveRefresh
+      const postSpy = vi.spyOn(axiosDefault, 'post').mockReturnValueOnce(
+        new Promise((r) => (resolveRefresh = r))
+      )
+
+      const calls = [handler()(unauthorized('old-access')), handler()(unauthorized('old-access')), handler()(unauthorized('old-access'))]
+      await Promise.resolve()
+      resolveRefresh({ data: { data: { accessToken: 'access-2', refreshToken: 'refresh-2' } } })
+      await Promise.all(calls)
+
+      expect(postSpy).toHaveBeenCalledTimes(1)
+      expect(adapter).toHaveBeenCalledTimes(3)
+      for (const [config] of adapter.mock.calls) expect(config.headers.Authorization).toBe('Bearer access-2')
+      expect(store.refreshToken).toBe('refresh-2')
+    })
+
+    it('tab lain sudah refresh (localStorage lebih baru dari memori tab ini) → TIDAK refresh lagi, pakai token dari tab lain', async () => {
+      const store = useAuthStore()
+      store.setTokens('old-access', 'refresh-1')
+      // Tab lain merotasi token: localStorage berubah, Pinia di tab ini belum tahu.
+      localStorage.setItem('accessToken', 'access-from-other-tab')
+      localStorage.setItem('refreshToken', 'refresh-from-other-tab')
+      const postSpy = vi.spyOn(axiosDefault, 'post')
+
+      await handler()(unauthorized('old-access'))
+
+      expect(postSpy).not.toHaveBeenCalled()
+      expect(adapter.mock.calls[0][0].headers.Authorization).toBe('Bearer access-from-other-tab')
+      expect(store.accessToken).toBe('access-from-other-tab')
+      expect(store.refreshToken).toBe('refresh-from-other-tab')
+    })
+
+    it('refresh memakai refresh token terbaru dari localStorage, bukan salinan lama di memori', async () => {
+      const store = useAuthStore()
+      store.setTokens('access-1', 'refresh-1')
+      // Hanya refresh token yang berbeda (mis. tab lain login ulang dengan akses yang juga sudah kedaluwarsa).
+      localStorage.setItem('refreshToken', 'refresh-latest')
+      const postSpy = vi.spyOn(axiosDefault, 'post').mockResolvedValueOnce({
+        data: { accessToken: 'access-2', refreshToken: 'refresh-2' }
+      })
+
+      await handler()(unauthorized('access-1'))
+
+      expect(postSpy).toHaveBeenCalledWith(expect.stringContaining('/auth/refresh'), { refreshToken: 'refresh-latest' })
+    })
+
+    it('refresh berjalan di dalam Web Lock yang sama untuk semua tab', async () => {
+      const lockNames = []
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: { request: vi.fn(async (name, fn) => { lockNames.push(name); return fn() }) }
+      })
+      const store = useAuthStore()
+      store.setTokens('old-access', 'refresh-1')
+      vi.spyOn(axiosDefault, 'post').mockResolvedValueOnce({ data: { accessToken: 'access-2', refreshToken: 'refresh-2' } })
+
+      await handler()(unauthorized('old-access'))
+
+      expect(lockNames).toEqual(['dorm-auth-refresh'])
+    })
+
+    it('tab lain sudah logout (refresh token hilang dari localStorage) → logout juga, tanpa memanggil /auth/refresh', async () => {
+      const store = useAuthStore()
+      store.setTokens('old-access', 'refresh-1')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      const postSpy = vi.spyOn(axiosDefault, 'post')
+
+      await expect(handler()(unauthorized('old-access'))).rejects.toBeTruthy()
+
+      expect(postSpy).not.toHaveBeenCalled()
+      expect(store.accessToken).toBeNull()
+      expect(window.location.href).toMatch(/\/login$/)
+    })
+
+    it('refresh gagal karena jaringan / 5xx → sesi TIDAK dihapus, error diteruskan', async () => {
+      const store = useAuthStore()
+      store.setTokens('old-access', 'refresh-1')
+      vi.spyOn(axiosDefault, 'post').mockRejectedValueOnce(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }))
+
+      await expect(handler()(unauthorized('old-access'))).rejects.toBeTruthy()
+
+      expect(store.refreshToken).toBe('refresh-1')
+      expect(window.location.href).toBe('http://localhost/dashboard')
+    })
+  })
+
+  describe('request interceptor — header tambahan', () => {
+    it('tidak mengirim header ngrok (backend CORS hanya mengizinkan Content-Type dan Authorization)', () => {
+      const store = useAuthStore()
+      store.setTokens('abc123', 'refresh')
+      const out = api.interceptors.request.handlers[0].fulfilled({ headers: {} })
+      expect(Object.keys(out.headers)).toEqual(['Authorization'])
     })
   })
 
