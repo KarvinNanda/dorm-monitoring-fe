@@ -14,6 +14,7 @@ import {
   nowJakartaDatetimeInput
 } from '@/utils/dateFormat'
 import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
+import { apiErrorMessage } from '@/utils/apiError'
 
 // ============ TOAST ============
 const toast = ref({ show: false, type: 'success', message: '' })
@@ -25,7 +26,7 @@ function showToast(message, type = 'success') {
 }
 
 function extractError(err, fallback = 'Terjadi kesalahan') {
-  return err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback
+  return apiErrorMessage(err, fallback)
 }
 
 // formatDate, toJakartaDatetimeInput, jakartaInputToISO, nowJakartaDatetimeInput

@@ -48,6 +48,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Another tab may have rotated (or removed) the tokens in localStorage.
+  // Load the latest pair into this tab's state and return it.
+  function syncTokensFromStorage() {
+    accessToken.value = localStorage.getItem('accessToken') || null
+    refreshToken.value = localStorage.getItem('refreshToken') || null
+    return { accessToken: accessToken.value, refreshToken: refreshToken.value }
+  }
+
   function setUser(userData) {
     user.value = userData
     if (userData) {
@@ -81,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
     hasRole,
     hasAnyRole,
     setTokens,
+    syncTokensFromStorage,
     setUser,
     clearAuth,
     logout

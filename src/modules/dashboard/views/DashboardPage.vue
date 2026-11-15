@@ -13,6 +13,7 @@ import {
   RefreshCw,
   StickyNote
 } from 'lucide-vue-next'
+import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
@@ -46,11 +47,7 @@ async function fetchDashboard() {
     if (err?.response?.status === 404) {
       data.value = isResident.value ? { clockStatus: null } : {}
     } else {
-      errorMessage.value =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        'Gagal memuat ringkasan dashboard'
+      errorMessage.value = apiErrorMessage(err, 'Gagal memuat ringkasan dashboard')
     }
   } finally {
     loading.value = false

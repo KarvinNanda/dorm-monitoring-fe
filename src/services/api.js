@@ -32,22 +32,86 @@ api.interceptors.request.use((config) => {
   const authStore = useAuthStore()
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
-    config.headers['ngrok-skip-browser-warning'] = true
     config.withCredentials = true
   }
   return config
 })
 
 // ============ RESPONSE INTERCEPTOR (REFRESH LOGIC) ============
-let isRefreshing = false
-let failedQueue = []
+// Refresh tokens are single-use: every POST /auth/refresh returns a new pair
+// and the old refresh token stops working. Two refreshes with the same token
+// (two requests in one tab, or two tabs) would make the second one fail with
+// 401 and log the user out. So:
+// - inside one tab, all 401s share one in-flight refresh (refreshPromise);
+// - across tabs, the refresh runs inside a Web Lock, and before refreshing we
+//   reload the tokens from localStorage: if another tab already rotated them,
+//   use its new access token instead of refreshing again.
+const REFRESH_LOCK = 'dorm-auth-refresh'
+let refreshPromise = null
 
-function processQueue(error, token = null) {
-  failedQueue.forEach((p) => {
-    if (error) p.reject(error)
-    else p.resolve(token)
+class SessionEndedError extends Error {}
+
+function withRefreshLock(fn) {
+  if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+    return navigator.locks.request(REFRESH_LOCK, fn)
+  }
+  // Browsers without Web Locks (Safari < 15.4): single flight per tab only.
+  return fn()
+}
+
+async function refreshAccessToken(staleAccessToken) {
+  const authStore = useAuthStore()
+  return withRefreshLock(async () => {
+    const latest = authStore.syncTokensFromStorage()
+    if (!latest.refreshToken) {
+      // Logged out in another tab (or never logged in).
+      throw new SessionEndedError('No refresh token')
+    }
+    if (latest.accessToken && latest.accessToken !== staleAccessToken) {
+      // Another tab (or an earlier refresh here) already has a newer token.
+      return latest.accessToken
+    }
+
+    let data
+    try {
+      // Plain axios, so this call does not go through this interceptor.
+      ;({ data } = await axios.post(`${BASE_URL}/auth/refresh`, {
+        refreshToken: latest.refreshToken
+      }))
+    } catch (err) {
+      const status = err?.response?.status
+      // 4xx: the refresh token is invalid, expired or already used. Log out.
+      // Network error or 5xx: the session may still be fine, keep it.
+      if (status >= 400 && status < 500 && status !== 429) {
+        throw new SessionEndedError(err.message)
+      }
+      throw err
+    }
+
+    // Dukung response yang di-wrap { data: {...} } atau flat
+    const payload = data?.data || data
+    if (!payload?.accessToken || !payload?.refreshToken) {
+      throw new SessionEndedError('Refresh response without tokens')
+    }
+    authStore.setTokens(payload.accessToken, payload.refreshToken)
+    return payload.accessToken
   })
-  failedQueue = []
+}
+
+function refreshOnce(staleAccessToken) {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken(staleAccessToken).finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
+}
+
+function endSession() {
+  useAuthStore().clearAuth()
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
 }
 
 api.interceptors.response.use(
@@ -69,57 +133,21 @@ api.interceptors.response.use(
       !isAuthEndpoint &&
       authStore.refreshToken
     ) {
-      if (isRefreshing) {
-        // Kalau sudah ada refresh jalan, masuk antrian
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`
-            return api(originalRequest)
-          })
-          .catch((err) => Promise.reject(err))
-      }
-
       originalRequest._retry = true
-      isRefreshing = true
-
+      const sentWith = String(originalRequest.headers?.Authorization || '').replace(/^Bearer /, '')
       try {
-        // Pakai axios langsung biar tidak masuk loop interceptor
-        const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
-          refreshToken: authStore.refreshToken
-        })
-
-        // Dukung response yang di-wrap { data: {...} } atau flat
-        const payload = data?.data || data
-        const newAccessToken = payload.accessToken
-        const newRefreshToken = payload.refreshToken
-
-        if (!newAccessToken) throw new Error('Refresh token gagal')
-
-        authStore.setTokens(newAccessToken, newRefreshToken)
-        processQueue(null, newAccessToken)
-
+        const newAccessToken = await refreshOnce(sentWith)
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
         return api(originalRequest)
       } catch (refreshError) {
-        processQueue(refreshError, null)
-        authStore.clearAuth()
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
+        if (refreshError instanceof SessionEndedError) endSession()
         return Promise.reject(refreshError)
-      } finally {
-        isRefreshing = false
       }
     }
 
     // Kalau 401 tanpa refresh token → langsung logout
     if (error.response?.status === 401 && !isAuthEndpoint) {
-      authStore.clearAuth()
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
-      }
+      endSession()
     }
 
     return Promise.reject(error)

@@ -62,7 +62,7 @@ describe('LoginPage', () => {
 
   it('error 401 → tampilkan pesan kredensial salah', async () => {
     authService.login.mockRejectedValueOnce({
-      response: { status: 401, data: { message: 'Unauthorized' } }
+      response: { status: 401, data: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } }
     })
 
     const wrapper = mount(LoginPage)
@@ -71,10 +71,22 @@ describe('LoginPage', () => {
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Unauthorized')
+    expect(wrapper.text()).toContain('Email atau kata sandi salah.')
     expect(pushMock).not.toHaveBeenCalled()
     const store = useAuthStore()
     expect(store.accessToken).toBeNull()
+  })
+
+  it('429 → "coba lagi dalam 1 menit" (backend: maks 5 percobaan per menit)', async () => {
+    authService.login.mockRejectedValueOnce({
+      response: { status: 429, data: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, please try again later' } }
+    })
+    const wrapper = mount(LoginPage)
+    await wrapper.find('input[type="email"]').setValue('k@x')
+    await wrapper.find('input[type="password"]').setValue('salahpass')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Terlalu banyak percobaan. Coba lagi dalam 1 menit.')
   })
 
   it('ERR_NETWORK → tampilkan pesan koneksi', async () => {
