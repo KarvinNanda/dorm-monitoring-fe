@@ -103,6 +103,22 @@ describe('ProfilePage', () => {
     expect(authService.resetPassword).not.toHaveBeenCalled()
   })
 
+  it('password baru > 72 byte → blokir submit (batas bcrypt di backend)', async () => {
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+    await openPasswordModal(wrapper)
+    const inputs = wrapper.findAll('input[type="password"]')
+    expect(inputs[1].attributes('maxlength')).toBe('72')
+    await inputs[0].setValue('current123')
+    await inputs[1].setValue('é'.repeat(40)) // 40 karakter, 80 byte
+    await inputs[2].setValue('é'.repeat(40))
+    const forms = wrapper.findAll('form')
+    await forms[forms.length - 1].trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('maksimal 72')
+    expect(authService.resetPassword).not.toHaveBeenCalled()
+  })
+
   it('reset password sukses → memanggil authService.resetPassword', async () => {
     authService.resetPassword.mockResolvedValueOnce({})
     const wrapper = mount(ProfilePage)

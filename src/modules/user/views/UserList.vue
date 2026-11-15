@@ -9,6 +9,7 @@ import { confirmDialog } from '@/composables/useConfirm'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
 import { usePageSize, resetToFirstPage } from '@/composables/usePageSize'
+import { newPasswordError, PASSWORD_MAX_BYTES } from '@/utils/password'
 
 const authStore = useAuthStore()
 
@@ -190,9 +191,12 @@ async function saveUser() {
     formError.value = 'Email wajib diisi'
     return
   }
-  if (!editingUser.value && (!form.value.password || form.value.password.length < 8)) {
-    formError.value = 'Kata sandi minimal 8 karakter'
-    return
+  if (!editingUser.value) {
+    const pwError = newPasswordError(form.value.password)
+    if (pwError) {
+      formError.value = pwError
+      return
+    }
   }
 
   saving.value = true
@@ -212,7 +216,8 @@ async function saveUser() {
         email: form.value.email,
         password: form.value.password,
         phoneNumber: form.value.phoneNumber || undefined,
-        roleIds: form.value.roleIds?.length ? form.value.roleIds : undefined
+        // Backend wants numbers ([1, 2]); strings ("1") return 400.
+        roleIds: form.value.roleIds?.length ? toRoleIds(form.value.roleIds) : undefined
       }
       await userService.create(payload)
       showToast('User baru berhasil dibuat')
@@ -273,8 +278,9 @@ function openPasswordModal(user) {
 
 async function submitPassword() {
   passwordError.value = ''
-  if (!passwordForm.value.newPassword || passwordForm.value.newPassword.length < 8) {
-    passwordError.value = 'Kata sandi minimal 8 karakter'
+  const pwError = newPasswordError(passwordForm.value.newPassword)
+  if (pwError) {
+    passwordError.value = pwError
     return
   }
   savingPassword.value = true
@@ -307,12 +313,7 @@ async function submitRoles() {
   }
   savingRoles.value = true
   try {
-    // Backend validator expects List<number>. Kalau id datang sebagai string,
-    // serialisasi JSON akan mengirim string dan validator menolaknya.
-    const ids = rolesForm.value.roleIds
-      .map((v) => Number(v))
-      .filter((n) => Number.isFinite(n))
-    await userService.assignRoles(rolesTarget.value.id, ids)
+    await userService.assignRoles(rolesTarget.value.id, toRoleIds(rolesForm.value.roleIds))
     showToast('Role user berhasil diperbarui')
     showRolesModal.value = false
     await fetchUsers()
@@ -323,6 +324,12 @@ async function submitRoles() {
   } finally {
     savingRoles.value = false
   }
+}
+
+// Backend validator expects number[]. Ids that arrive as strings would be
+// sent as strings and rejected with 400.
+function toRoleIds(ids) {
+  return ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
 }
 
 function roleLabel(r) {
@@ -342,7 +349,7 @@ function roleLabel(r) {
     <section class="card p-4 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_auto_auto_auto] items-end" aria-label="Cari dan urutkan user">
       <div class="col-span-2 sm:col-span-1">
         <label for="user-search" class="field-label text-xs sr-only sm:not-sr-only sm:mb-1.5">Cari</label>
-        <input id="user-search" v-model="search" type="search" placeholder="Cari nama" class="field" />
+        <input id="user-search" v-model="search" type="search" placeholder="Cari nama atau email" class="field" />
       </div>
       <button
         type="button"
@@ -536,11 +543,12 @@ function roleLabel(r) {
             v-model="form.password"
             required
             minlength="8"
+            :maxlength="PASSWORD_MAX_BYTES"
             autocomplete="new-password"
             aria-describedby="user-form-password-hint"
             class="field pr-12"
           />
-          <p id="user-form-password-hint" class="field-hint">Minimal 8 karakter.</p>
+          <p id="user-form-password-hint" class="field-hint">8 sampai 72 karakter.</p>
         </div>
         <fieldset v-if="!editingUser && roles.length">
           <legend class="field-label">Role <span class="font-normal text-ink-muted">(opsional)</span></legend>
@@ -578,11 +586,12 @@ function roleLabel(r) {
             v-model="passwordForm.newPassword"
             required
             minlength="8"
+            :maxlength="PASSWORD_MAX_BYTES"
             autocomplete="new-password"
             aria-describedby="password-form-hint"
             class="field pr-12"
           />
-          <p id="password-form-hint" class="field-hint">Minimal 8 karakter. Sampaikan ke user lewat jalur yang aman.</p>
+          <p id="password-form-hint" class="field-hint">8 sampai 72 karakter. Sampaikan ke user lewat jalur yang aman.</p>
         </div>
       </form>
       <template #footer>
