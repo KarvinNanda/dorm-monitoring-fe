@@ -169,6 +169,58 @@ describe('UserList', () => {
     expect(userService.assignRoles).toHaveBeenCalledWith(2, [2, 1])
   })
 
+  async function openCreateForm(wrapper) {
+    await wrapper.findAll('button').find((b) => b.text().includes('Tambah User')).trigger('click')
+    await flushPromises()
+    const dialog = wrapper.find('[role="dialog"]')
+    await dialog.find('#user-form-name').setValue('Baru')
+    await dialog.find('#user-form-email').setValue('baru@x')
+    return dialog
+  }
+
+  it('tambah user: password > 72 byte ditolak sebelum request', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    const dialog = await openCreateForm(wrapper)
+    expect(dialog.find('#user-form-password').attributes('maxlength')).toBe('72')
+    await dialog.find('#user-form-password').setValue('a'.repeat(73))
+    await wrapper.find('#user-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('maksimal 72')
+    expect(userService.create).not.toHaveBeenCalled()
+  })
+
+  it('tambah user: roleIds dikirim sebagai number walau id role dari API berupa string', async () => {
+    userService.listRoles.mockResolvedValue([{ id: '1', name: 'admin' }, { id: '2', name: 'resident' }])
+    userService.create.mockResolvedValue({ id: 7 })
+    const wrapper = mount(UserList)
+    await flushPromises()
+    const dialog = await openCreateForm(wrapper)
+    await dialog.find('#user-form-password').setValue('rahasia123')
+    await dialog.findAll('input[type="checkbox"]')[1].setValue(true)
+    await wrapper.find('#user-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(userService.create).toHaveBeenCalledWith(expect.objectContaining({ roleIds: [2] }))
+  })
+
+  it('reset kata sandi (admin): password > 72 byte ditolak sebelum request', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    await wrapper.find('button[aria-label="Reset kata sandi Andi"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#password-form-new').attributes('maxlength')).toBe('72')
+    await wrapper.find('#password-form-new').setValue('😀'.repeat(19)) // 76 byte
+    await wrapper.find('#password-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.text()).toContain('maksimal 72')
+  })
+
+  it('search placeholder: nama atau email (backend mencari keduanya)', async () => {
+    const wrapper = mount(UserList)
+    await flushPromises()
+    expect(wrapper.find('#user-search').attributes('placeholder')).toBe('Cari nama atau email')
+  })
+
   it('form tambah user: setiap input punya label tersambung', async () => {
     const wrapper = mount(UserList)
     await flushPromises()

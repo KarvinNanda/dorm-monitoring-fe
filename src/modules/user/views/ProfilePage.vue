@@ -7,6 +7,7 @@ import PasswordInput from '@/components/PasswordInput.vue'
 import { authService } from '@/services/authService'
 import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/authStore'
+import { newPasswordError, PASSWORD_MAX_BYTES } from '@/utils/password'
 import { apiErrorMessage } from '@/utils/apiError'
 
 const authStore = useAuthStore()
@@ -119,8 +120,9 @@ async function submitPassword() {
     passwordError.value = 'Kata sandi saat ini wajib diisi'
     return
   }
-  if (!newPassword || newPassword.length < 8) {
-    passwordError.value = 'Kata sandi baru minimal 8 karakter'
+  const pwError = newPasswordError(newPassword)
+  if (pwError) {
+    passwordError.value = pwError
     return
   }
   if (newPassword !== confirmPassword) {
@@ -236,11 +238,12 @@ async function submitPassword() {
             v-model="passwordForm.newPassword"
             required
             minlength="8"
+            :maxlength="PASSWORD_MAX_BYTES"
             autocomplete="new-password"
             aria-describedby="password-new-hint"
             class="field pr-12"
           />
-          <p id="password-new-hint" class="field-hint">Minimal 8 karakter.</p>
+          <p id="password-new-hint" class="field-hint">8 sampai 72 karakter.</p>
         </div>
         <div>
           <label for="password-confirm" class="field-label">Konfirmasi kata sandi baru</label>
@@ -249,6 +252,7 @@ async function submitPassword() {
             v-model="passwordForm.confirmPassword"
             required
             minlength="8"
+            :maxlength="PASSWORD_MAX_BYTES"
             autocomplete="new-password"
             class="field pr-12"
           />
